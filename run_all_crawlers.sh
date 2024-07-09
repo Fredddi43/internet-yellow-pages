@@ -45,5 +45,8 @@ python3 -m iyp.crawlers.nro.delegated_stats
 # URL data
 python3 -m iyp.crawlers.citizenlab.urldb
 
+# OONI
+python3 -m iyp.crawlers.ooni.webconnectivity
+
 echo "All crawlers finished"
 date
