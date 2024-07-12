@@ -132,3 +132,4 @@ dmypy.json
 dumps/
 data/
 ooni_jsonl/
+.vscode/

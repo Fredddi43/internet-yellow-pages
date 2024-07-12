@@ -4,15 +4,17 @@ import os
 import sys
 import tempfile
 import json
+import tldextract
+import ipaddress
 from collections import defaultdict
 
-from utils import grabber
+# from utils import grabber
 
 from iyp import BaseCrawler
 
 ORG = "OONI"
 URL = "https://ooni.org/post/mining-ooni-data"
-NAME = "ooni.webconnectivity"
+NAME = "ooni.web_test"
 
 
 class Crawler(BaseCrawler):
@@ -25,19 +27,23 @@ class Crawler(BaseCrawler):
         """Fetch data and push to IYP."""
 
         self.all_asns = set()
-        self.all_domains = set()
+        self.all_urls = set()
         self.all_countries = set()
         self.all_results = list()
         self.all_percentages = list()
+        self.all_hostnames = set()
 
         # Create a temporary directory
         tmpdir = tempfile.mkdtemp()
 
         # Fetch data
-        grabber.download_and_extract(self.repo, tmpdir, "webconnectivity")
+        # grabber.download_and_extract(self.repo, tmpdir, "webconnectivity")
         logging.info("Successfully downloaded and extracted all files")
         # Now that we have downloaded the jsonl files for the test we want, we can extract the data we want
-        testdir = os.path.join(tmpdir, "webconnectivity")
+        testdir = os.path.join(
+            r"C:\Users\fried\Documents\internet-yellow-pages\ooni_jsonl",
+            "webconnectivity",
+        )
         for file_name in os.listdir(testdir):
             file_path = os.path.join(
                 testdir,
@@ -55,9 +61,11 @@ class Crawler(BaseCrawler):
         self.batch_add_to_iyp()
         logging.info("\n Successfully added all entries to IYP\n")
 
-    # process a single line from the jsonl file and store the results locally
+    # Process a single line from the jsonl file and store the results locally
     def process_one_line(self, one_line):
         """Add the entry to IYP if it's not already there and update its properties."""
+
+        ips = {"ipv4": [], "ipv6": []}
 
         probe_asn = (
             int(one_line.get("probe_asn")[2:])
@@ -65,13 +73,31 @@ class Crawler(BaseCrawler):
             else None
         )
         probe_cc = one_line.get("probe_cc")
-        input_domain = one_line.get("input")
+        input_url = one_line.get("input")
         test_keys = one_line.get("test_keys", {})
         blocking = test_keys.get("blocking")
         accessible = test_keys.get("accessible")
 
+        # Extract the IPs from the DNS replies, if they exist
+        queries = test_keys.get("queries", [])
+        for query in queries:
+            answers = query.get("answers")
+            if answers:
+                for answer in answers:
+                    ipv4 = answer.get("ipv4", [])
+                    ipv6 = answer.get("ipv6", [])
+                    ips["ipv4"].extend(ipv4 if isinstance(ipv4, list) else [ipv4])
+                    ips["ipv6"].extend(ipv6 if isinstance(ipv6, list) else [ipv6])
+
+        # Remove duplicates if necessary
+        ips["ipv4"] = list(set(ips["ipv4"]))
+        ips["ipv6"] = list(set(ips["ipv6"]))
+
+        # Extract the hostname from the URL
+        hostname = tldextract.extract(input_url).fqdn
+
         # Ensure all required fields are present
-        if probe_asn and probe_cc and input_domain and test_keys:
+        if probe_asn and probe_cc and input_url and test_keys:
             # Determine the result based on the table (https://github.com/ooni/spec/blob/master/nettests/ts-017-web-connectivity.md)
             if blocking is None and accessible is None:
                 result = "Failure"  # Could not assign values to the fields
@@ -90,77 +116,126 @@ class Crawler(BaseCrawler):
             else:
                 result = "Anomaly"  # Default case if no other case matches
 
-        # Append the results to the list
-        self.all_asns.add(probe_asn)
-        self.all_countries.add(probe_cc)
-        self.all_domains.add(input_domain)
-        self.all_results.append((probe_asn, probe_cc, input_domain, result))
+            # Append the results to the list
+            self.all_asns.add(probe_asn)
+            self.all_countries.add(probe_cc)
+            self.all_urls.add(input_url)
+            self.all_hostnames.add(hostname)
+            self.all_results.append(
+                (probe_asn, probe_cc, input_url, result, hostname, ips)
+            )
 
-    # now we add all the entries to IYP
+    # Now we add all the entries to IYP
     def batch_add_to_iyp(self):
         # First, add the nodes and store their IDs
-        asn_ids = self.iyp.batch_get_nodes_by_single_prop(
-            "AS", "asn", self.all_asns, all=False
-        )
+        asn_ids = self.iyp.batch_get_nodes_by_single_prop("AS", "asn", self.all_asns)
         country_ids = self.iyp.batch_get_nodes_by_single_prop(
-            "Country", "country_code", self.all_countries, all=False
+            "Country", "country_code", self.all_countries
         )
-        domain_ids = self.iyp.batch_get_nodes_by_single_prop(
-            "URL", "url", self.all_domains, all=False
+        url_ids = self.iyp.batch_get_nodes_by_single_prop("URL", "url", self.all_urls)
+        hostname_ids = self.iyp.batch_get_nodes_by_single_prop(
+            "HostName", "name", self.all_hostnames
         )
 
         # Store the IDs in a structured format for easy mapping
         self.node_ids = {
-            "asn": asn_ids,
-            "country": country_ids,
-            "domain": domain_ids,
+            "asn": {asn: id for asn, id in zip(self.all_asns, asn_ids)},
+            "country": {
+                country: id for country, id in zip(self.all_countries, country_ids)
+            },
+            "url": {url: id for url, id in zip(self.all_urls, url_ids)},
+            "hostname": {
+                hostname: id for hostname, id in zip(self.all_hostnames, hostname_ids)
+            },
         }
 
         country_links = []
         censored_links = []
+        resolves_to_links = []
+        part_of_links = []
 
-        # Ensure all IDs are present
-        for (asn, country, domain), results in self.all_percentages.items():
-            # Retrieve the IDs for the current asn, domain, and country
-            asn_id = self.node_ids["asn"].get(asn)
-            domain_id = self.node_ids["domain"].get(domain)
-            country_id = self.node_ids["country"].get(country)
-
-            # Ensure both IDs are present
-            if asn_id and domain_id:
-                percentages = results.get("percentages", {})
-                # Create link properties
-                props = [{"property": "reference_org", "value": "OONI"}]
-                # Add percentages to the props
-                for category, percentage in percentages.items():
-                    props.append(
-                        {"property": f"percentage_{category}", "value": percentage}
+        # Collect all IP addresses first
+        all_ips = []
+        for asn, country, url, result, hostname, ips in self.all_results:
+            if result == "OK" and hostname and ips:
+                for ip_type in ips.values():
+                    all_ips.extend(
+                        ipaddress.ip_address(ip).compressed for ip in ip_type
                     )
 
-                # Add link to the list
+        # Fetch all IP nodes in one batch
+        ip_ids = self.iyp.batch_get_nodes_by_single_prop("IP", "ip", all_ips)
+        ip_id_map = {ip: ip_id for ip, ip_id in zip(all_ips, ip_ids)}
+
+        # Ensure all IDs are present and process results
+        for asn, country, url, result, hostname, ips in self.all_results:
+            asn_id = self.node_ids["asn"].get(asn)
+            url_id = self.node_ids["url"].get(url)
+            country_id = self.node_ids["country"].get(country)
+            hostname_id = self.node_ids["hostname"].get(hostname)
+
+            if asn_id and url_id:
+                props = [self.reference]
+                if (asn, country, url) in self.all_percentages:
+                    percentages = self.all_percentages[(asn, country, url)].get(
+                        "percentages", {}
+                    )
+                    for category, percentage in percentages.items():
+                        props.append(
+                            {"property": f"percentage_{category}", "value": percentage}
+                        )
                 censored_links.append(
-                    {"src_id": asn_id, "dst_id": domain_id, "props": props}
+                    {"src_id": asn_id, "dst_id": url_id, "props": props}
                 )
 
-            # Ensure both IDs are present
             if asn_id and country_id:
-                props = [{"property": "reference_org", "value": "OONI"}]
-
-                # Add link to the list
                 country_links.append(
-                    {"src_id": asn_id, "dst_id": country_id, "props": props}
+                    {"src_id": asn_id, "dst_id": country_id, "props": [self.reference]}
                 )
 
+            if result == "OK" and hostname and ips:
+                compressed_ips = [
+                    ipaddress.ip_address(ip).compressed
+                    for ip_type in ips.values()
+                    for ip in ip_type
+                ]
+                for ip in compressed_ips:
+                    ip_id = ip_id_map.get(ip)
+                    if hostname_id and ip_id:
+                        resolves_to_links.append(
+                            {
+                                "src_id": hostname_id,
+                                "dst_id": ip_id,
+                                "props": [self.reference],
+                            }
+                        )
+                    if url_id and ip_id:
+                        part_of_links.append(
+                            {
+                                "src_id": url_id,
+                                "dst_id": ip_id,
+                                "props": [self.reference],
+                            }
+                        )
+
+            if hostname_id and url_id:
+                part_of_links.append(
+                    {"src_id": hostname_id, "dst_id": url_id, "props": [self.reference]}
+                )
+
+        # Batch add the links (this is faster than adding them one by one)
         self.iyp.batch_add_links("REACH", censored_links)
         self.iyp.batch_add_links("COUNTRY", country_links)
+        self.iyp.batch_add_links("RESOLVES_TO", resolves_to_links)
+        self.iyp.batch_add_links("PART_OF", part_of_links)
 
-    # calculate the percentages of the results
+    # Calculate the percentages of the results
     def calculate_percentages(self):
         target_dict = defaultdict(lambda: defaultdict(int))
 
         # Populate the target_dict with counts
         for entry in self.all_results:
-            asn, country, target, result = entry
+            asn, country, target, result, hostname, ips = entry
             target_dict[(asn, country, target)][result] += 1
 
         self.all_percentages = {}
