@@ -32,6 +32,7 @@ class Crawler(BaseCrawler):
         self.all_results = list()
         self.all_percentages = list()
         self.all_hostnames = set()
+        self.all_dns_resolvers = set()
 
         # Create a temporary directory
         tmpdir = tempfile.mkdtemp()
@@ -72,6 +73,13 @@ class Crawler(BaseCrawler):
             if one_line.get("probe_asn") and one_line.get("probe_asn").startswith("AS")
             else None
         )
+        # Add the DNS resolver to the set, unless its not a valid IP address
+        try:
+            self.all_dns_resolvers.add(
+                ipaddress.ip_address(one_line.get("resolver_ip"))
+            )
+        except ValueError:
+            pass
         probe_cc = one_line.get("probe_cc")
         input_url = one_line.get("input")
         test_keys = one_line.get("test_keys", {})
@@ -127,26 +135,19 @@ class Crawler(BaseCrawler):
 
     # Now we add all the entries to IYP
     def batch_add_to_iyp(self):
-        # First, add the nodes and store their IDs
-        asn_ids = self.iyp.batch_get_nodes_by_single_prop("AS", "asn", self.all_asns)
-        country_ids = self.iyp.batch_get_nodes_by_single_prop(
-            "Country", "country_code", self.all_countries
-        )
-        url_ids = self.iyp.batch_get_nodes_by_single_prop("URL", "url", self.all_urls)
-        hostname_ids = self.iyp.batch_get_nodes_by_single_prop(
-            "HostName", "name", self.all_hostnames
-        )
-
-        # Store the IDs in a structured format for easy mapping
+        # First, add the nodes and store their IDs directly as returned dictionaries
         self.node_ids = {
-            "asn": {asn: id for asn, id in zip(self.all_asns, asn_ids)},
-            "country": {
-                country: id for country, id in zip(self.all_countries, country_ids)
-            },
-            "url": {url: id for url, id in zip(self.all_urls, url_ids)},
-            "hostname": {
-                hostname: id for hostname, id in zip(self.all_hostnames, hostname_ids)
-            },
+            "asn": self.iyp.batch_get_nodes_by_single_prop("AS", "asn", self.all_asns),
+            "country": self.iyp.batch_get_nodes_by_single_prop(
+                "Country", "country_code", self.all_countries
+            ),
+            "url": self.iyp.batch_get_nodes_by_single_prop("URL", "url", self.all_urls),
+            "hostname": self.iyp.batch_get_nodes_by_single_prop(
+                "HostName", "name", self.all_hostnames
+            ),
+            "dns_resolver": self.iyp.batch_get_nodes_by_single_prop(
+                "IP", "ip", self.all_dns_resolvers, all=False
+            ),
         }
 
         country_links = []
@@ -164,8 +165,7 @@ class Crawler(BaseCrawler):
                     )
 
         # Fetch all IP nodes in one batch
-        ip_ids = self.iyp.batch_get_nodes_by_single_prop("IP", "ip", all_ips)
-        ip_id_map = {ip: ip_id for ip, ip_id in zip(all_ips, ip_ids)}
+        ip_id_map = self.iyp.batch_get_nodes_by_single_prop("IP", "ip", all_ips)
 
         # Ensure all IDs are present and process results
         for asn, country, url, result, hostname, ips in self.all_results:
@@ -224,10 +224,15 @@ class Crawler(BaseCrawler):
                 )
 
         # Batch add the links (this is faster than adding them one by one)
-        self.iyp.batch_add_links("REACH", censored_links)
+        self.iyp.batch_add_links("CENSORED", censored_links)
         self.iyp.batch_add_links("COUNTRY", country_links)
         self.iyp.batch_add_links("RESOLVES_TO", resolves_to_links)
         self.iyp.batch_add_links("PART_OF", part_of_links)
+
+        # Batch add node labels
+        self.iyp.batch_add_node_label(
+            list(self.node_ids["dns_resolver"].values()), "Resolver"
+        )
 
     # Calculate the percentages of the results
     def calculate_percentages(self):
