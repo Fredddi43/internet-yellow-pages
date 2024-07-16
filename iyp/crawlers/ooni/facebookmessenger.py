@@ -2,20 +2,18 @@ import argparse
 import logging
 import os
 import sys
-
-# import tempfile
+import tempfile
 import json
-import tldextract
 import ipaddress
 from collections import defaultdict
 
-# from utils import grabber
+from utils import grabber
 
 from iyp import BaseCrawler
 
 ORG = "OONI"
 URL = "https://ooni.org/post/mining-ooni-data"
-NAME = "ooni.web_test"
+NAME = "ooni.facebookmessenger"
 
 
 class Crawler(BaseCrawler):
@@ -34,29 +32,32 @@ class Crawler(BaseCrawler):
         self.all_dns_resolvers = set()
 
         # Create a temporary directory
-        # tmpdir = tempfile.mkdtemp()
+        tmpdir = tempfile.mkdtemp()
 
         # Fetch data
-        # grabber.download_and_extract(self.repo, tmpdir, "facebookmessenger")
+        grabber.download_and_extract(self.repo, tmpdir, "facebookmessenger")
         logging.info("Successfully downloaded and extracted all files")
         # Now that we have downloaded the jsonl files for the test we want, we can extract the data we want
         testdir = os.path.join(
-            r"C:\Users\fried\Documents\internet-yellow-pages\ooni_jsonl",
-            "signal",
+            tmpdir,
+            "facebookmessenger",
         )
         for file_name in os.listdir(testdir):
-            file_path = os.path.join(testdir, file_name)
+            file_path = os.path.join(
+                testdir,
+                file_name,
+            )
             if os.path.isfile(file_path) and file_path.endswith(".jsonl"):
                 with open(file_path, "r") as file:
                     for i, line in enumerate(file):
                         data = json.loads(line)
                         self.process_one_line(data)
                         logging.info(f"\rProcessed {i+1} lines")
-        logging.info("\nProcessed lines, now calculating percentages\n")
+        logging.info("\n Processed lines, now calculating percentages\n")
         self.calculate_percentages()
-        logging.info("\nCalculated percentages, now adding entries to IYP\n")
+        logging.info("\n Calculated percentages, now adding entries to IYP\n")
         self.batch_add_to_iyp()
-        logging.info("\nSuccessfully added all entries to IYP\n")
+        logging.info("\n Successfully added all entries to IYP\n")
 
     # Process a single line from the jsonl file and store the results locally
     def process_one_line(self, one_line):
@@ -67,7 +68,7 @@ class Crawler(BaseCrawler):
             if one_line.get("probe_asn") and one_line.get("probe_asn").startswith("AS")
             else None
         )
-        # Add the DNS resolver to the set, unless it's not a valid IP address
+        # Add the DNS resolver to the set, unless its not a valid IP address
         try:
             self.all_dns_resolvers.add(
                 ipaddress.ip_address(one_line.get("resolver_ip"))
@@ -75,15 +76,13 @@ class Crawler(BaseCrawler):
         except ValueError:
             pass
         probe_cc = one_line.get("probe_cc")
-        result = one_line.get("test_keys", {}).get("signal_backend_status", "").lower()
-
-        # Normalize result to be either "OK" or "Failure"
-        result = "OK" if result == "ok" else "Failure"
+        result_dns = one_line.get("test_keys", {}).get("facebook_dns_blocking")
+        result_tcp = one_line.get("test_keys", {}).get("facebook_tcp_blocking")
 
         # Append the results to the list
         self.all_asns.add(probe_asn)
         self.all_countries.add(probe_cc)
-        self.all_results.append((probe_asn, probe_cc, result))
+        self.all_results.append((probe_asn, probe_cc, result_dns, result_tcp))
 
     def batch_add_to_iyp(self):
         # First, add the nodes and store their IDs directly as returned dictionaries
@@ -97,15 +96,15 @@ class Crawler(BaseCrawler):
             ),
         }
 
-        signal_id = self.iyp.batch_get_nodes_by_single_prop(
-            "Tag", "label", {"Signal"}
-        ).get("Signal")
+        whatsapp_id = self.iyp.batch_get_nodes_by_single_prop(
+            "Tag", "label", {"WhatsApp"}
+        ).get("WhatsApp")
 
         country_links = []
         censored_links = []
 
         # Ensure all IDs are present and process results
-        for asn, country, result in self.all_results:
+        for asn, country, result_dns, result_tcp in self.all_results:
             asn_id = self.node_ids["asn"].get(asn)
             country_id = self.node_ids["country"].get(country)
 
@@ -122,13 +121,18 @@ class Crawler(BaseCrawler):
                         "total_count", 0
                     )
 
-                    for category in ["OK", "Failure"]:
+                    for category in [
+                        "unblocked",
+                        "dns_blocking",
+                        "tcp_blocking",
+                        "both_blocked",
+                    ]:
                         props[f"percentage_{category}"] = percentages.get(category, 0)
                         props[f"count_{category}"] = counts.get(category, 0)
                     props["total_count"] = total_count
 
                 censored_links.append(
-                    {"src_id": asn_id, "dst_id": signal_id, "props": [props]}
+                    {"src_id": asn_id, "dst_id": whatsapp_id, "props": [props]}
                 )
 
                 country_links.append(
@@ -151,12 +155,19 @@ class Crawler(BaseCrawler):
         target_dict = defaultdict(lambda: defaultdict(int))
 
         # Initialize counts for all categories
-        categories = ["OK", "Failure"]
+        categories = ["unblocked", "dns_blocking", "tcp_blocking", "both_blocked"]
 
         # Populate the target_dict with counts
         for entry in self.all_results:
-            asn, country, result = entry
-            target_dict[(asn, country)][result] += 1
+            asn, country, result_dns, result_tcp = entry
+            if not result_dns and not result_tcp:
+                target_dict[(asn, country)]["unblocked"] += 1
+            elif result_dns and not result_tcp:
+                target_dict[(asn, country)]["dns_blocking"] += 1
+            elif not result_dns and result_tcp:
+                target_dict[(asn, country)]["tcp_blocking"] += 1
+            elif result_dns and result_tcp:
+                target_dict[(asn, country)]["both_blocked"] += 1
 
         self.all_percentages = {}
 

@@ -14,7 +14,7 @@ from iyp import BaseCrawler
 
 ORG = "OONI"
 URL = "https://ooni.org/post/mining-ooni-data"
-NAME = "ooni.web_test"
+NAME = "ooni.webconnectivity"
 
 
 class Crawler(BaseCrawler):
@@ -133,7 +133,6 @@ class Crawler(BaseCrawler):
                 (probe_asn, probe_cc, input_url, result, hostname, ips)
             )
 
-    # Now we add all the entries to IYP
     def batch_add_to_iyp(self):
         # First, add the nodes and store their IDs directly as returned dictionaries
         self.node_ids = {
@@ -175,17 +174,25 @@ class Crawler(BaseCrawler):
             hostname_id = self.node_ids["hostname"].get(hostname)
 
             if asn_id and url_id:
-                props = [self.reference]
+                props = self.reference.copy()
                 if (asn, country, url) in self.all_percentages:
                     percentages = self.all_percentages[(asn, country, url)].get(
                         "percentages", {}
                     )
-                    for category, percentage in percentages.items():
-                        props.append(
-                            {"property": f"percentage_{category}", "value": percentage}
-                        )
+                    counts = self.all_percentages[(asn, country, url)].get(
+                        "category_counts", {}
+                    )
+                    total_count = self.all_percentages[(asn, country, url)].get(
+                        "total_count", 0
+                    )
+
+                    for category in ["OK", "Confirmed", "Failure", "Anomaly"]:
+                        props[f"percentage_{category}"] = percentages.get(category, 0)
+                        props[f"count_{category}"] = counts.get(category, 0)
+                    props["total_count"] = total_count
+
                 censored_links.append(
-                    {"src_id": asn_id, "dst_id": url_id, "props": props}
+                    {"src_id": asn_id, "dst_id": url_id, "props": [props]}
                 )
 
             if asn_id and country_id:
@@ -245,12 +252,23 @@ class Crawler(BaseCrawler):
 
         self.all_percentages = {}
 
+        # Define all possible result categories to ensure they are included
+        possible_results = ["OK", "Confirmed", "Failure", "Anomaly"]
+
         for (asn, country, target), counts in target_dict.items():
             total_count = sum(counts.values())
+
+            # Initialize counts for all possible results to ensure they are included
+            for result in possible_results:
+                counts[result] = counts.get(result, 0)
+
             percentages = {
-                category: (count / total_count) * 100
-                for category, count in counts.items()
+                category: (
+                    (counts[category] / total_count) * 100 if total_count > 0 else 0
+                )
+                for category in possible_results
             }
+
             result_dict = {
                 "total_count": total_count,
                 "category_counts": dict(counts),
