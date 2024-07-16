@@ -130,9 +130,6 @@ class Crawler(BaseCrawler):
                     {"src_id": asn_id, "dst_id": country_id, "props": [props]}
                 )
 
-        # Test print for the first censored link
-        print(censored_links[0])
-
         # Batch add the links (this is faster than adding them one by one)
         self.iyp.batch_add_links("CENSORED", censored_links)
         self.iyp.batch_add_links("COUNTRY", country_links)
