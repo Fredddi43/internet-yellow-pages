@@ -12,7 +12,7 @@ from iyp import BaseCrawler
 
 ORG = "OONI"
 URL = "https://ooni.org/post/mining-ooni-data"
-NAME = "ooni.tor_test"
+NAME = "ooni.tor"
 
 
 class Crawler(BaseCrawler):
@@ -37,7 +37,7 @@ class Crawler(BaseCrawler):
         grabber.download_and_extract(self.repo, tmpdir, "tor_test_data")
         logging.info("Successfully downloaded and extracted all files")
 
-        testdir = os.path.join(tmpdir, "tor_test_data")
+        testdir = os.path.join(tmpdir, "tor")
         for file_name in os.listdir(testdir):
             file_path = os.path.join(testdir, file_name)
             if os.path.isfile(file_path) and file_path.endswith(".jsonl"):
