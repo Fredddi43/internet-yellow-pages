@@ -2,20 +2,17 @@ import argparse
 import logging
 import os
 import sys
-
-# import tempfile
+import tempfile
 import json
-import tldextract
-import ipaddress
 from collections import defaultdict
 
-# from utils import grabber
+from utils import grabber
 
 from iyp import BaseCrawler
 
 ORG = "OONI"
 URL = "https://ooni.org/post/mining-ooni-data"
-NAME = "ooni.web_test"
+NAME = "ooni.riseupvpn"
 
 
 class Crawler(BaseCrawler):
@@ -26,25 +23,21 @@ class Crawler(BaseCrawler):
 
     def run(self):
         """Fetch data and push to IYP."""
+
         self.all_asns = set()
-        self.all_urls = set()
         self.all_countries = set()
         self.all_results = list()
-        self.all_percentages = list()
-        self.all_hostnames = set()
+        self.all_percentages = {}
         self.all_dns_resolvers = set()
 
         # Create a temporary directory
-        # tmpdir = tempfile.mkdtemp()
+        tmpdir = tempfile.mkdtemp()
 
         # Fetch data
-        # grabber.download_and_extract(self.repo, tmpdir, "facebookmessenger")
+        grabber.download_and_extract(self.repo, tmpdir, "riseupvpn")
         logging.info("Successfully downloaded and extracted all files")
         # Now that we have downloaded the jsonl files for the test we want, we can extract the data we want
-        testdir = os.path.join(
-            r"C:\Users\fried\Documents\internet-yellow-pages\ooni_jsonl",
-            "riseupvpn",
-        )
+        testdir = os.path.join(tmpdir, "riseupvpn")
         for file_name in os.listdir(testdir):
             file_path = os.path.join(testdir, file_name)
             if os.path.isfile(file_path) and file_path.endswith(".jsonl"):
@@ -132,9 +125,6 @@ class Crawler(BaseCrawler):
                 country_links.append(
                     {"src_id": asn_id, "dst_id": country_id, "props": [props]}
                 )
-
-        # Test print for the first censored link
-        print(censored_links[0])
 
         # Batch add the links (this is faster than adding them one by one)
         self.iyp.batch_add_links("CENSORED", censored_links)

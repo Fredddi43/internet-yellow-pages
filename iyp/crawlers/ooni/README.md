@@ -9,8 +9,8 @@ IYP OONI Implementation Tracker
 | HTTP Header Field Manipulation           | O - Done                  |
 | HTTP Invalid Requestline                 | O - Done                  |
 | NDT (Speed Test)                         | X - Won’t Fix                |
-| Psiphon (Censorship Circumvention VPN)   | O - Planned                  |
-| RiseUp VPN                               | O - Planned                  |
+| Psiphon (Censorship Circumvention VPN)   | O - Done                  |
+| RiseUp VPN                               | O - Done                  |
 | Run                                      | ???                          |
 | Signal                                   | O - Done                     |
 | STUN Reachability                        | O - Planned                  |
