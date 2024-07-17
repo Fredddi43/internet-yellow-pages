@@ -43,7 +43,7 @@ class Crawler(BaseCrawler):
         # Now that we have downloaded the jsonl files for the test we want, we can extract the data we want
         testdir = os.path.join(
             r"C:\Users\fried\Documents\internet-yellow-pages\ooni_jsonl",
-            "whatsapp",
+            "httpheaderfieldmanipulation",
         )
         for file_name in os.listdir(testdir):
             file_path = os.path.join(testdir, file_name)
@@ -68,36 +68,44 @@ class Crawler(BaseCrawler):
             if one_line.get("probe_asn") and one_line.get("probe_asn").startswith("AS")
             else None
         )
-        # Add the DNS resolver to the set, unless it's not a valid IP address
-        try:
-            self.all_dns_resolvers.add(
-                ipaddress.ip_address(one_line.get("resolver_ip"))
-            )
-        except ValueError:
-            pass
         probe_cc = one_line.get("probe_cc")
-        test_keys = one_line.get("test_keys", {})
+        test_keys = one_line.get("test_keys", {}).get("tampering", {})
 
-        # Determine the status and failure for each category
-        server_status = test_keys.get("registration_server_status", "").lower()
-        server_failure = test_keys.get("registration_server_failure")
-        endpoint_status = test_keys.get("whatsapp_endpoints_status", "").lower()
-        web_status = test_keys.get("whatsapp_web_status", "").lower()
-        web_failure = test_keys.get("whatsapp_web_failure")
-
-        server_result = (
-            "server_failure"
-            if server_failure is not None
-            else f"server_{server_status}"
+        total = "total" if test_keys.get("total", False) else "no_total"
+        request_line_capitalization = (
+            "request_line_capitalization"
+            if test_keys.get("request_line_capitalization", False)
+            else "no_request_line_capitalization"
         )
-        endpoint_result = f"endpoint_{endpoint_status}"
-        web_result = "web_failure" if web_failure is not None else f"web_{web_status}"
+        header_name_capitalization = (
+            "header_name_capitalization"
+            if test_keys.get("header_name_capitalization", False)
+            else "no_header_name_capitalization"
+        )
+        header_field_value = (
+            "header_field_value"
+            if test_keys.get("header_field_value", False)
+            else "no_header_field_value"
+        )
+        header_field_number = (
+            "header_field_number"
+            if test_keys.get("header_field_number", False)
+            else "no_header_field_number"
+        )
 
         # Append the results to the list
         self.all_asns.add(probe_asn)
         self.all_countries.add(probe_cc)
         self.all_results.append(
-            (probe_asn, probe_cc, server_result, endpoint_result, web_result)
+            (
+                probe_asn,
+                probe_cc,
+                total,
+                request_line_capitalization,
+                header_name_capitalization,
+                header_field_value,
+                header_field_number,
+            )
         )
 
     def batch_add_to_iyp(self):
@@ -112,9 +120,9 @@ class Crawler(BaseCrawler):
             ),
         }
 
-        whatsapp_id = self.iyp.batch_get_nodes_by_single_prop(
-            "Tag", "label", {"WhatsApp"}
-        ).get("WhatsApp")
+        httpheader_id = self.iyp.batch_get_nodes_by_single_prop(
+            "Tag", "label", {"HttpHeaderFieldManipulation"}
+        ).get("HttpHeaderFieldManipulation")
 
         country_links = []
         censored_links = []
@@ -123,9 +131,11 @@ class Crawler(BaseCrawler):
         for (
             asn,
             country,
-            server_result,
-            endpoint_result,
-            web_result,
+            total,
+            request_line_capitalization,
+            header_name_capitalization,
+            header_field_value,
+            header_field_number,
         ) in self.all_results:
             asn_id = self.node_ids["asn"].get(asn)
             country_id = self.node_ids["country"].get(country)
@@ -144,20 +154,23 @@ class Crawler(BaseCrawler):
                     )
 
                     for category in [
-                        "server_failure",
-                        "server_ok",
-                        "server_blocked",
-                        "endpoint_ok",
-                        "endpoint_blocked",
-                        "web_failure",
-                        "web_ok",
+                        "total",
+                        "no_total",
+                        "request_line_capitalization",
+                        "no_request_line_capitalization",
+                        "header_name_capitalization",
+                        "no_header_name_capitalization",
+                        "header_field_value",
+                        "no_header_field_value",
+                        "header_field_number",
+                        "no_header_field_number",
                     ]:
                         props[f"percentage_{category}"] = percentages.get(category, 0)
                         props[f"count_{category}"] = counts.get(category, 0)
                     props["total_count"] = total_count
 
                 censored_links.append(
-                    {"src_id": asn_id, "dst_id": whatsapp_id, "props": [props]}
+                    {"src_id": asn_id, "dst_id": httpheader_id, "props": [props]}
                 )
 
                 country_links.append(
@@ -181,21 +194,34 @@ class Crawler(BaseCrawler):
 
         # Initialize counts for all categories
         categories = [
-            "server_failure",
-            "server_ok",
-            "server_blocked",
-            "endpoint_ok",
-            "endpoint_blocked",
-            "web_failure",
-            "web_ok",
+            "total",
+            "no_total",
+            "request_line_capitalization",
+            "no_request_line_capitalization",
+            "header_name_capitalization",
+            "no_header_name_capitalization",
+            "header_field_value",
+            "no_header_field_value",
+            "header_field_number",
+            "no_header_field_number",
         ]
 
         # Populate the target_dict with counts
         for entry in self.all_results:
-            asn, country, server_result, endpoint_result, web_result = entry
-            target_dict[(asn, country)][server_result] += 1
-            target_dict[(asn, country)][endpoint_result] += 1
-            target_dict[(asn, country)][web_result] += 1
+            (
+                asn,
+                country,
+                total,
+                request_line_capitalization,
+                header_name_capitalization,
+                header_field_value,
+                header_field_number,
+            ) = entry
+            target_dict[(asn, country)][total] += 1
+            target_dict[(asn, country)][request_line_capitalization] += 1
+            target_dict[(asn, country)][header_name_capitalization] += 1
+            target_dict[(asn, country)][header_field_value] += 1
+            target_dict[(asn, country)][header_field_number] += 1
 
         self.all_percentages = {}
 

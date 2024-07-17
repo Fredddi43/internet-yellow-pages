@@ -6,7 +6,7 @@ IYP OONI Implementation Tracker
 | DNS Check (new DNS Test)                 | ? - All Results Fail,        |
 |                                          | Results Questionable         |
 | Facebook Messenger                       | O - Done                     |
-| HTTP Header Field Manipulation           | O - Planned                  |
+| HTTP Header Field Manipulation           | O - Done                  |
 | HTTP Invalid Requestline                 | O - Planned                  |
 | NDT (Speed Test)                         | X - Won’t Fix                |
 | Psiphon (Censorship Circumvention VPN)   | O - Planned                  |
