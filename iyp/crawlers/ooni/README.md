@@ -19,4 +19,4 @@ IYP OONI Implementation Tracker
 | TORSF                                    | O - Planned                  |
 | Vanilla TOR                              | O - Planned                  |
 | Webconnectivity                          | O - Done                     |
-| Whatsapp                                 | O - Planned                  |
+| Whatsapp                                 | O - Done                  |

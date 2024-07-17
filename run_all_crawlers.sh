@@ -47,6 +47,11 @@ python3 -m iyp.crawlers.citizenlab.urldb
 
 # OONI
 python3 -m iyp.crawlers.ooni.webconnectivity
+python3 -m iyp.crawlers.ooni.facebookmessenger
+python3 -m iyp.crawlers.ooni.signal
+python3 -m iyp.crawlers.ooni.telegram
+python3 -m iyp.crawlers.ooni.whatsapp
+python3 -m iyp.crawlers.ooni.httpheaderfieldmanipulation
 
 echo "All crawlers finished"
 date

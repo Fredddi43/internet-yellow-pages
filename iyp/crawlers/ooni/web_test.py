@@ -43,7 +43,7 @@ class Crawler(BaseCrawler):
         # Now that we have downloaded the jsonl files for the test we want, we can extract the data we want
         testdir = os.path.join(
             r"C:\Users\fried\Documents\internet-yellow-pages\ooni_jsonl",
-            "telegram",
+            "whatsapp",
         )
         for file_name in os.listdir(testdir):
             file_path = os.path.join(testdir, file_name)
@@ -76,33 +76,28 @@ class Crawler(BaseCrawler):
         except ValueError:
             pass
         probe_cc = one_line.get("probe_cc")
+        test_keys = one_line.get("test_keys", {})
 
-        telegram_http_blocking = one_line.get("test_keys", {}).get(
-            "telegram_http_blocking", False
-        )
-        telegram_tcp_blocking = one_line.get("test_keys", {}).get(
-            "telegram_tcp_blocking", False
-        )
-        telegram_web_status = (
-            one_line.get("test_keys", {}).get("telegram_web_status", "null").lower()
-        )
+        # Determine the status and failure for each category
+        server_status = test_keys.get("registration_server_status", "").lower()
+        server_failure = test_keys.get("registration_server_failure")
+        endpoint_status = test_keys.get("whatsapp_endpoints_status", "").lower()
+        web_status = test_keys.get("whatsapp_web_status", "").lower()
+        web_failure = test_keys.get("whatsapp_web_failure")
 
-        # Normalize result
-        if telegram_web_status == "blocked":
-            result_web = "web_blocked"
-        elif telegram_web_status == "ok":
-            result_web = "unblocked"
-        else:
-            result_web = "unblocked"
-
-        result_http = "http_blocked" if telegram_http_blocking else "unblocked"
-        result_tcp = "tcp_blocked" if telegram_tcp_blocking else "unblocked"
+        server_result = (
+            "server_failure"
+            if server_failure is not None
+            else f"server_{server_status}"
+        )
+        endpoint_result = f"endpoint_{endpoint_status}"
+        web_result = "web_failure" if web_failure is not None else f"web_{web_status}"
 
         # Append the results to the list
         self.all_asns.add(probe_asn)
         self.all_countries.add(probe_cc)
         self.all_results.append(
-            (probe_asn, probe_cc, result_web, result_http, result_tcp)
+            (probe_asn, probe_cc, server_result, endpoint_result, web_result)
         )
 
     def batch_add_to_iyp(self):
@@ -117,15 +112,21 @@ class Crawler(BaseCrawler):
             ),
         }
 
-        telegram_id = self.iyp.batch_get_nodes_by_single_prop(
-            "Tag", "label", {"Telegram"}
-        ).get("Telegram")
+        whatsapp_id = self.iyp.batch_get_nodes_by_single_prop(
+            "Tag", "label", {"WhatsApp"}
+        ).get("WhatsApp")
 
         country_links = []
         censored_links = []
 
         # Ensure all IDs are present and process results
-        for asn, country, result_web, result_http, result_tcp in self.all_results:
+        for (
+            asn,
+            country,
+            server_result,
+            endpoint_result,
+            web_result,
+        ) in self.all_results:
             asn_id = self.node_ids["asn"].get(asn)
             country_id = self.node_ids["country"].get(country)
 
@@ -143,17 +144,20 @@ class Crawler(BaseCrawler):
                     )
 
                     for category in [
-                        "unblocked",
-                        "web_blocked",
-                        "http_blocking",
-                        "tcp_blocking",
+                        "server_failure",
+                        "server_ok",
+                        "server_blocked",
+                        "endpoint_ok",
+                        "endpoint_blocked",
+                        "web_failure",
+                        "web_ok",
                     ]:
                         props[f"percentage_{category}"] = percentages.get(category, 0)
                         props[f"count_{category}"] = counts.get(category, 0)
                     props["total_count"] = total_count
 
                 censored_links.append(
-                    {"src_id": asn_id, "dst_id": telegram_id, "props": [props]}
+                    {"src_id": asn_id, "dst_id": whatsapp_id, "props": [props]}
                 )
 
                 country_links.append(
@@ -176,14 +180,22 @@ class Crawler(BaseCrawler):
         target_dict = defaultdict(lambda: defaultdict(int))
 
         # Initialize counts for all categories
-        categories = ["unblocked", "web_blocked", "http_blocked", "tcp_blocked"]
+        categories = [
+            "server_failure",
+            "server_ok",
+            "server_blocked",
+            "endpoint_ok",
+            "endpoint_blocked",
+            "web_failure",
+            "web_ok",
+        ]
 
         # Populate the target_dict with counts
         for entry in self.all_results:
-            asn, country, result_web, result_http, result_tcp = entry
-            target_dict[(asn, country)][result_web] += 1
-            target_dict[(asn, country)][result_http] += 1
-            target_dict[(asn, country)][result_tcp] += 1
+            asn, country, server_result, endpoint_result, web_result = entry
+            target_dict[(asn, country)][server_result] += 1
+            target_dict[(asn, country)][endpoint_result] += 1
+            target_dict[(asn, country)][web_result] += 1
 
         self.all_percentages = {}
 
