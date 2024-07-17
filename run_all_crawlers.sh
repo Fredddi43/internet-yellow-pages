@@ -52,6 +52,13 @@ python3 -m iyp.crawlers.ooni.signal
 python3 -m iyp.crawlers.ooni.telegram
 python3 -m iyp.crawlers.ooni.whatsapp
 python3 -m iyp.crawlers.ooni.httpheaderfieldmanipulation
+python3 -m iyp.crawlers.ooni.httpinvalidrequestline
+python3 -m iyp.crawlers.ooni.psiphon
+python3 -m iyp.crawlers.ooni.riseupvpn
+python3 -m iyp.crawlers.ooni.stunreachability
+python3 -m iyp.crawlers.ooni.tor
+python3 -m iyp.crawlers.ooni.torsf
+python3 -m iyp.crawlers.ooni.vanillator
 
 echo "All crawlers finished"
 date
