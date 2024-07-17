@@ -33,6 +33,7 @@ class Crawler(BaseCrawler):
         self.all_percentages = list()
         self.all_hostnames = set()
         self.all_dns_resolvers = set()
+        self.all_ips = set()
 
         # Create a temporary directory
         # tmpdir = tempfile.mkdtemp()
@@ -71,7 +72,7 @@ class Crawler(BaseCrawler):
             if one_line.get("probe_asn") and one_line.get("probe_asn").startswith("AS")
             else None
         )
-        # Add the DNS resolver to the set, unless its not a valid IP address
+        # Add the DNS resolver to the set, unless it's not a valid IP address
         try:
             self.all_dns_resolvers.add(
                 ipaddress.ip_address(one_line.get("resolver_ip"))
@@ -86,11 +87,27 @@ class Crawler(BaseCrawler):
 
         if stun_endpoint:
             # Extract the hostname from the STUN endpoint URL if it's not an IP address
+            hostname = None
+            stun_url = stun_endpoint.split("//")[-1]
+            stun_ip_port = stun_url.split(":")
+            stun_ip = stun_ip_port[0]
+
             try:
-                ipaddress.ip_address(stun_endpoint.split(":")[1])
-                hostname = None
+                ipaddress.ip_address(stun_ip)
             except ValueError:
-                hostname = tldextract.extract(stun_endpoint).fqdn
+                hostname = tldextract.extract(stun_url).fqdn
+
+            # Handle "queries" section to get IP addresses and map them to the hostname
+            ip_addresses = []
+            for query in test_keys.get("queries", []):
+                if query and query.get("answers"):
+                    for answer in query.get("answers", []):
+                        if "ipv4" in answer:
+                            ip_addresses.append(answer["ipv4"])
+                        elif "ipv6" in answer:
+                            ip_addresses.append(answer["ipv6"])
+
+            self.all_ips.update(ip_addresses)
 
             # Ensure all required fields are present
             if probe_asn and probe_cc and stun_endpoint:
@@ -101,7 +118,7 @@ class Crawler(BaseCrawler):
                 if hostname:
                     self.all_hostnames.add(hostname)
                 self.all_results.append(
-                    (probe_asn, probe_cc, stun_endpoint, result, hostname)
+                    (probe_asn, probe_cc, stun_endpoint, result, hostname, ip_addresses)
                 )
 
     def batch_add_to_iyp(self):
@@ -124,21 +141,23 @@ class Crawler(BaseCrawler):
         stun_links = []
         resolves_to_links = []
 
-        # Collect all IP addresses first
-        all_ips = set()
-        for asn, country, stun_endpoint, result, hostname in self.all_results:
-            if result == "Success":
-                try:
-                    ip = ipaddress.ip_address(stun_endpoint.split(":")[1]).compressed
-                    all_ips.add(ip)
-                except ValueError:
-                    pass
-
         # Fetch all IP nodes in one batch
-        ip_id_map = self.iyp.batch_get_nodes_by_single_prop("IP", "ip", all_ips)
+        if self.all_ips:
+            ip_id_map = self.iyp.batch_get_nodes_by_single_prop(
+                "IP", "ip", list(self.all_ips)
+            )
+        else:
+            ip_id_map = {}
 
         # Ensure all IDs are present and process results
-        for asn, country, stun_endpoint, result, hostname in self.all_results:
+        for (
+            asn,
+            country,
+            stun_endpoint,
+            result,
+            hostname,
+            ip_addresses,
+        ) in self.all_results:
             asn_id = self.node_ids["asn"].get(asn)
             url_id = self.node_ids["url"].get(stun_endpoint)
             country_id = self.node_ids["country"].get(country)
@@ -172,8 +191,7 @@ class Crawler(BaseCrawler):
                 )
 
             if result == "Success" and hostname_id:
-                try:
-                    ip = ipaddress.ip_address(stun_endpoint.split(":")[1]).compressed
+                for ip in ip_addresses:
                     ip_id = ip_id_map.get(ip)
                     if ip_id:
                         resolves_to_links.append(
@@ -183,8 +201,6 @@ class Crawler(BaseCrawler):
                                 "props": [self.reference],
                             }
                         )
-                except ValueError:
-                    pass
 
         # Batch add the links (this is faster than adding them one by one)
         self.iyp.batch_add_links("STUN", stun_links)
@@ -202,7 +218,7 @@ class Crawler(BaseCrawler):
 
         # Populate the target_dict with counts
         for entry in self.all_results:
-            asn, country, stun_endpoint, result, hostname = entry
+            asn, country, stun_endpoint, result, hostname, ip_addresses = entry
             target_dict[(asn, country, stun_endpoint)][result] += 1
 
         self.all_percentages = {}
