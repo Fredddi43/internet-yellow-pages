@@ -7,7 +7,7 @@ IYP OONI Implementation Tracker
 |                                          | Results Questionable         |
 | Facebook Messenger                       | O - Done                     |
 | HTTP Header Field Manipulation           | O - Done                  |
-| HTTP Invalid Requestline                 | O - Planned                  |
+| HTTP Invalid Requestline                 | O - Done                  |
 | NDT (Speed Test)                         | X - Won’t Fix                |
 | Psiphon (Censorship Circumvention VPN)   | O - Planned                  |
 | RiseUp VPN                               | O - Planned                  |
