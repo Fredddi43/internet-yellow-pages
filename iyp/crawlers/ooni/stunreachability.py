@@ -2,20 +2,19 @@ import argparse
 import logging
 import os
 import sys
-
-# import tempfile
+import tempfile
 import json
 import tldextract
 import ipaddress
 from collections import defaultdict
 
-# from utils import grabber
+from utils import grabber
 
 from iyp import BaseCrawler
 
 ORG = "OONI"
 URL = "https://ooni.org/post/mining-ooni-data"
-NAME = "ooni.web_test"
+NAME = "ooni.stunreachability"
 
 
 class Crawler(BaseCrawler):
@@ -26,6 +25,7 @@ class Crawler(BaseCrawler):
 
     def run(self):
         """Fetch data and push to IYP."""
+
         self.all_asns = set()
         self.all_urls = set()
         self.all_countries = set()
@@ -35,14 +35,14 @@ class Crawler(BaseCrawler):
         self.all_dns_resolvers = set()
 
         # Create a temporary directory
-        # tmpdir = tempfile.mkdtemp()
+        tmpdir = tempfile.mkdtemp()
 
         # Fetch data
-        # grabber.download_and_extract(self.repo, tmpdir, "facebookmessenger")
+        grabber.download_and_extract(self.repo, tmpdir, "stunreachability")
         logging.info("Successfully downloaded and extracted all files")
         # Now that we have downloaded the jsonl files for the test we want, we can extract the data we want
         testdir = os.path.join(
-            r"C:\Users\fried\Documents\internet-yellow-pages\ooni_jsonl",
+            tmpdir,
             "stunreachability",
         )
         for file_name in os.listdir(testdir):

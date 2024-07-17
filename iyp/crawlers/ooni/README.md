@@ -13,7 +13,7 @@ IYP OONI Implementation Tracker
 | RiseUp VPN                               | O - Done                  |
 | Run                                      | ???                          |
 | Signal                                   | O - Done                     |
-| STUN Reachability                        | O - Planned                  |
+| STUN Reachability                        | O - Done                  |
 | Telegram                                 | O - Done                  |
 | TOR                                      | O - Planned                  |
 | TORSF                                    | O - Planned                  |
