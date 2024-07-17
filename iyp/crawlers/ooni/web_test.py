@@ -44,13 +44,10 @@ class Crawler(BaseCrawler):
         # Now that we have downloaded the jsonl files for the test we want, we can extract the data we want
         testdir = os.path.join(
             r"C:\Users\fried\Documents\internet-yellow-pages\ooni_jsonl",
-            "stunreachability",
+            "vanillator",
         )
         for file_name in os.listdir(testdir):
-            file_path = os.path.join(
-                testdir,
-                file_name,
-            )
+            file_path = os.path.join(testdir, file_name)
             if os.path.isfile(file_path) and file_path.endswith(".jsonl"):
                 with open(file_path, "r") as file:
                     for i, line in enumerate(file):
@@ -80,46 +77,16 @@ class Crawler(BaseCrawler):
         except ValueError:
             pass
         probe_cc = one_line.get("probe_cc")
-        stun_endpoint = one_line.get("input")
         test_keys = one_line.get("test_keys", {})
-        failure = test_keys.get("failure")
-        result = "Success" if failure is None else "Failure"
+        success = test_keys.get("success", False)
 
-        if stun_endpoint:
-            # Extract the hostname from the STUN endpoint URL if it's not an IP address
-            hostname = None
-            stun_url = stun_endpoint.split("//")[-1]
-            stun_ip_port = stun_url.split(":")
-            stun_ip = stun_ip_port[0]
+        # Normalize result to be either "OK" or "Failure"
+        result = "OK" if success else "Failure"
 
-            try:
-                ipaddress.ip_address(stun_ip)
-            except ValueError:
-                hostname = tldextract.extract(stun_url).fqdn
-
-            # Handle "queries" section to get IP addresses and map them to the hostname
-            ip_addresses = []
-            for query in test_keys.get("queries", []):
-                if query and query.get("answers"):
-                    for answer in query.get("answers", []):
-                        if "ipv4" in answer:
-                            ip_addresses.append(answer["ipv4"])
-                        elif "ipv6" in answer:
-                            ip_addresses.append(answer["ipv6"])
-
-            self.all_ips.update(ip_addresses)
-
-            # Ensure all required fields are present
-            if probe_asn and probe_cc and stun_endpoint:
-                # Append the results to the list
-                self.all_asns.add(probe_asn)
-                self.all_countries.add(probe_cc)
-                self.all_urls.add(stun_endpoint)
-                if hostname:
-                    self.all_hostnames.add(hostname)
-                self.all_results.append(
-                    (probe_asn, probe_cc, stun_endpoint, result, hostname, ip_addresses)
-                )
+        # Append the results to the list
+        self.all_asns.add(probe_asn)
+        self.all_countries.add(probe_cc)
+        self.all_results.append((probe_asn, probe_cc, result))
 
     def batch_add_to_iyp(self):
         # First, add the nodes and store their IDs directly as returned dictionaries
@@ -128,116 +95,82 @@ class Crawler(BaseCrawler):
             "country": self.iyp.batch_get_nodes_by_single_prop(
                 "Country", "country_code", self.all_countries
             ),
-            "url": self.iyp.batch_get_nodes_by_single_prop("URL", "url", self.all_urls),
-            "hostname": self.iyp.batch_get_nodes_by_single_prop(
-                "HostName", "name", self.all_hostnames
-            ),
             "dns_resolver": self.iyp.batch_get_nodes_by_single_prop(
                 "IP", "ip", self.all_dns_resolvers, all=False
             ),
         }
 
-        country_links = []
-        stun_links = []
-        resolves_to_links = []
+        vanillator_id = self.iyp.batch_get_nodes_by_single_prop(
+            "Tag", "label", {"Vanilla Tor"}
+        ).get("Vanilla Tor")
 
-        # Fetch all IP nodes in one batch
-        if self.all_ips:
-            ip_id_map = self.iyp.batch_get_nodes_by_single_prop(
-                "IP", "ip", list(self.all_ips)
-            )
-        else:
-            ip_id_map = {}
+        country_links = []
+        censored_links = []
 
         # Ensure all IDs are present and process results
-        for (
-            asn,
-            country,
-            stun_endpoint,
-            result,
-            hostname,
-            ip_addresses,
-        ) in self.all_results:
+        for asn, country, result in self.all_results:
             asn_id = self.node_ids["asn"].get(asn)
-            url_id = self.node_ids["url"].get(stun_endpoint)
             country_id = self.node_ids["country"].get(country)
-            hostname_id = self.node_ids["hostname"].get(hostname)
 
-            if asn_id and url_id:
+            if asn_id and country_id:
                 props = self.reference.copy()
-                if (asn, country, stun_endpoint) in self.all_percentages:
-                    percentages = self.all_percentages[
-                        (asn, country, stun_endpoint)
-                    ].get("percentages", {})
-                    counts = self.all_percentages[(asn, country, stun_endpoint)].get(
+                if (asn, country) in self.all_percentages:
+                    percentages = self.all_percentages[(asn, country)].get(
+                        "percentages", {}
+                    )
+                    counts = self.all_percentages[(asn, country)].get(
                         "category_counts", {}
                     )
-                    total_count = self.all_percentages[
-                        (asn, country, stun_endpoint)
-                    ].get("total_count", 0)
+                    total_count = self.all_percentages[(asn, country)].get(
+                        "total_count", 0
+                    )
 
-                    for category in ["Success", "Failure"]:
+                    for category in ["OK", "Failure"]:
                         props[f"percentage_{category}"] = percentages.get(category, 0)
                         props[f"count_{category}"] = counts.get(category, 0)
                     props["total_count"] = total_count
 
-                stun_links.append(
-                    {"src_id": asn_id, "dst_id": url_id, "props": [props]}
+                censored_links.append(
+                    {"src_id": asn_id, "dst_id": vanillator_id, "props": [props]}
                 )
 
-            if asn_id and country_id:
                 country_links.append(
-                    {"src_id": asn_id, "dst_id": country_id, "props": [self.reference]}
+                    {"src_id": asn_id, "dst_id": country_id, "props": [props]}
                 )
-
-            if result == "Success" and hostname_id:
-                for ip in ip_addresses:
-                    ip_id = ip_id_map.get(ip)
-                    if ip_id:
-                        resolves_to_links.append(
-                            {
-                                "src_id": hostname_id,
-                                "dst_id": ip_id,
-                                "props": [self.reference],
-                            }
-                        )
 
         # Batch add the links (this is faster than adding them one by one)
-        self.iyp.batch_add_links("STUN", stun_links)
+        print(censored_links)
+        self.iyp.batch_add_links("CENSORED", censored_links)
         self.iyp.batch_add_links("COUNTRY", country_links)
-        self.iyp.batch_add_links("RESOLVES_TO", resolves_to_links)
 
         # Batch add node labels
         self.iyp.batch_add_node_label(
             list(self.node_ids["dns_resolver"].values()), "Resolver"
         )
 
-    # Calculate the percentages of the results
     def calculate_percentages(self):
         target_dict = defaultdict(lambda: defaultdict(int))
 
+        # Initialize counts for all categories
+        categories = ["OK", "Failure"]
+
         # Populate the target_dict with counts
         for entry in self.all_results:
-            asn, country, stun_endpoint, result, hostname, ip_addresses = entry
-            target_dict[(asn, country, stun_endpoint)][result] += 1
+            asn, country, result = entry
+            target_dict[(asn, country)][result] += 1
 
         self.all_percentages = {}
 
-        # Define all possible result categories to ensure they are included
-        possible_results = ["Success", "Failure"]
-
-        for (asn, country, stun_endpoint), counts in target_dict.items():
+        for (asn, country), counts in target_dict.items():
             total_count = sum(counts.values())
-
-            # Initialize counts for all possible results to ensure they are included
-            for result in possible_results:
-                counts[result] = counts.get(result, 0)
+            for category in categories:
+                counts[category] = counts.get(category, 0)
 
             percentages = {
                 category: (
                     (counts[category] / total_count) * 100 if total_count > 0 else 0
                 )
-                for category in possible_results
+                for category in categories
             }
 
             result_dict = {
@@ -245,7 +178,7 @@ class Crawler(BaseCrawler):
                 "category_counts": dict(counts),
                 "percentages": percentages,
             }
-            self.all_percentages[(asn, country, stun_endpoint)] = result_dict
+            self.all_percentages[(asn, country)] = result_dict
 
 
 def main() -> None:
