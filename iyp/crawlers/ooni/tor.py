@@ -23,20 +23,22 @@ class Crawler(BaseCrawler):
 
     def run(self):
         """Fetch data and push to IYP."""
-
         self.all_asns = set()
-        self.all_ips = set()
-        self.all_resolvers = set()
+        self.all_countries = set()
         self.all_results = list()
-        self.all_percentages = defaultdict(lambda: defaultdict(dict))
+        self.all_percentages = {}
+        self.all_ips = set()
+        self.all_dns_resolvers = set()
+        self.all_tags = {"or_port_dirauth", "dir_port", "obfs4"}
 
         # Create a temporary directory
         tmpdir = tempfile.mkdtemp()
 
         # Fetch data
-        grabber.download_and_extract(self.repo, tmpdir, "tor_test_data")
+        grabber.download_and_extract(self.repo, tmpdir, "tor")
         logging.info("Successfully downloaded and extracted all files")
 
+        # Process each JSONL file
         testdir = os.path.join(tmpdir, "tor")
         for file_name in os.listdir(testdir):
             file_path = os.path.join(testdir, file_name)
@@ -45,121 +47,129 @@ class Crawler(BaseCrawler):
                     for i, line in enumerate(file):
                         data = json.loads(line)
                         self.process_one_line(data)
-                        logging.info(f"\rProcessed {i+1} lines")
-        logging.info("\nProcessed lines, now calculating percentages\n")
+                        logging.info(f"Processed {i+1} lines")
+        logging.info("Processed lines, now calculating percentages")
         self.calculate_percentages()
-        logging.info("\nCalculated percentages, now adding entries to IYP\n")
+        logging.info("Calculated percentages, now adding entries to IYP")
         self.batch_add_to_iyp()
-        logging.info("\nSuccessfully added all entries to IYP\n")
+        logging.info("Successfully added all entries to IYP")
 
     def process_one_line(self, one_line):
-        """Process a single line from the jsonl file and store the results locally."""
+        """Process a single line of the JSONL file."""
 
-        ips = {"ipv4": [], "ipv6": []}
-
-        asn = (
+        probe_asn = (
             int(one_line.get("probe_asn")[2:])
             if one_line.get("probe_asn") and one_line.get("probe_asn").startswith("AS")
             else None
         )
+        probe_cc = one_line.get("probe_cc")
+        test_keys = one_line.get("test_keys", {})
 
-        # Add the resolver to the set, unless it's not a valid IP address
+        # Add the DNS resolver to the set, unless it's not a valid IP address
         try:
-            self.all_resolvers.add(
-                ipaddress.ip_address(one_line.get("resolver_ip")).compressed
+            self.all_dns_resolvers.add(
+                ipaddress.ip_address(one_line.get("resolver_ip"))
             )
         except ValueError:
             pass
 
-        # Extract the IPs and categorize them
-        for ip in one_line.get("ip_addresses", []):
-            ip_addr = ipaddress.ip_address(ip)
-            if ip_addr.version == 4:
-                ips["ipv4"].append(ip)
-            elif ip_addr.version == 6:
-                ips["ipv6"].append(ip)
-
-        tor_tags = {
-            "tor_or_port_dirauth": {
-                "percentage": one_line.get("tor_or_port_dirauth_percentage", 0),
-                "count": one_line.get("tor_or_port_dirauth_count", 0),
-            },
-            "tor_dir_port": {
-                "percentage": one_line.get("tor_dir_port_percentage", 0),
-                "count": one_line.get("tor_dir_port_count", 0),
-            },
-            "tor_obfs4": {
-                "percentage": one_line.get("tor_obfs4_percentage", 0),
-                "count": one_line.get("tor_obfs4_count", 0),
-            },
-        }
-
-        if asn and ips:
-            self.all_asns.add(asn)
-            for ip_type in ips.values():
-                for ip in ip_type:
-                    self.all_ips.add(ip)
-                    self.all_results.append((asn, ip, tor_tags))
+        # Check each target in the test_keys
+        targets = test_keys.get("targets", {})
+        for _, target_data in targets.items():
+            ip = ipaddress.ip_address(
+                target_data.get("target_address").rsplit(":", 1)[0].strip("[]")
+            )
+            self.all_ips.add(ip)
+            result = target_data.get("failure")
+            target_protocol = target_data.get("target_protocol")
+            if target_protocol not in self.all_tags:
+                continue
+            self.all_results.append((probe_asn, probe_cc, ip, target_protocol, result))
 
     def batch_add_to_iyp(self):
-        """Batch add the collected data to IYP."""
-
-        # First, add the nodes and store their IDs directly as returned dictionaries
         self.node_ids = {
             "asn": self.iyp.batch_get_nodes_by_single_prop("ASN", "asn", self.all_asns),
-            "ip": self.iyp.batch_get_nodes_by_single_prop("IP", "ip", self.all_ips),
-            "resolver": self.iyp.batch_get_nodes_by_single_prop(
-                "IP", "ip", self.all_resolvers
+            "country": self.iyp.batch_get_nodes_by_single_prop(
+                "Country", "country_code", self.all_countries
+            ),
+            "ip": self.iyp.batch_get_nodes_by_single_prop(
+                "IP", "ip", [str(ip) for ip in self.all_ips]
+            ),
+            "tag": self.iyp.batch_get_nodes_by_single_prop(
+                "Tag", "label", self.all_tags
+            ),
+            "dns_resolver": self.iyp.batch_get_nodes_by_single_prop(
+                "IP", "ip", self.all_dns_resolvers, all=False
             ),
         }
 
+        country_links = []
         censored_links = []
+        part_of_links = []
 
-        # Process results and create links
-        for asn, ip, tags in self.all_results:
+        for asn, country, ip, tor_type, _ in self.all_results:
             asn_id = self.node_ids["asn"].get(asn)
-            ip_id = self.node_ids["ip"].get(ip)
-
+            country_id = self.node_ids["country"].get(country)
+            ip_id = self.node_ids["ip"].get(str(ip))
+            tag_id = self.node_ids["tag"].get(tor_type)
             if asn_id and ip_id:
-                props = {
-                    "tor_or_port_dirauth_percentage": tags["tor_or_port_dirauth"][
-                        "percentage"
-                    ],
-                    "tor_or_port_dirauth_count": tags["tor_or_port_dirauth"]["count"],
-                    "tor_dir_port_percentage": tags["tor_dir_port"]["percentage"],
-                    "tor_dir_port_count": tags["tor_dir_port"]["count"],
-                    "tor_obfs4_percentage": tags["tor_obfs4"]["percentage"],
-                    "tor_obfs4_count": tags["tor_obfs4"]["count"],
-                }
+                props = self.reference.copy()
+                if (asn, ip) in self.all_percentages:
+                    percentages = self.all_percentages[(asn, ip)].get("percentages", {})
+                    counts = self.all_percentages[(asn, ip)].get("category_counts", {})
+                    total_count = self.all_percentages[(asn, ip)].get("total_count", 0)
+
+                    for category in ["Failure"]:
+                        props[f"percentage_{category}"] = percentages.get(category, 0)
+                        props[f"count_{category}"] = counts.get(category, 0)
+                    props["total_count"] = total_count
+
                 censored_links.append(
-                    {"src_id": asn_id, "dst_id": ip_id, "props": props}
+                    {"src_id": asn_id, "dst_id": ip_id, "props": [props]}
                 )
 
-        # Batch add the links (this is faster than adding them one by one)
+            if asn_id and country_id:
+                country_links.append(
+                    {"src_id": asn_id, "dst_id": country_id, "props": [self.reference]}
+                )
+
+            if ip_id and tag_id:
+                part_of_links.append(
+                    {"src_id": ip_id, "dst_id": tag_id, "props": [self.reference]}
+                )
         self.iyp.batch_add_links("CENSORED", censored_links)
+        self.iyp.batch_add_links("COUNTRY", country_links)
+        self.iyp.batch_add_links("PART_OF", part_of_links)
 
         # Batch add node labels
         self.iyp.batch_add_node_label(
-            list(self.node_ids["resolver"].values()), "Resolver"
+            list(self.node_ids["dns_resolver"].values()), "Resolver"
         )
 
     def calculate_percentages(self):
         target_dict = defaultdict(lambda: defaultdict(int))
-
-        # Populate the target_dict with counts
+        categories = ["Failure", "Success"]
         for entry in self.all_results:
-            asn, ip, tags = entry
-            for category, values in tags.items():
-                target_dict[(asn, ip)][category] += values["count"]
+            asn, country, ip, tor_type, result = entry
+            if result is not None:
+                target_dict[(asn, ip)]["Failure"] += 1
+            else:
+                target_dict[(asn, ip)]["Success"] += 1
 
         self.all_percentages = {}
 
         for (asn, ip), counts in target_dict.items():
             total_count = sum(counts.values())
+            for category in categories:
+                counts[category] = counts.get(category, 0)
+
             percentages = {
-                category: (count / total_count) * 100 if total_count > 0 else 0
-                for category, count in counts.items()
+                category: (
+                    (counts[category] / total_count) * 100 if total_count > 0 else 0
+                )
+                for category in categories
             }
+
             result_dict = {
                 "total_count": total_count,
                 "category_counts": dict(counts),

@@ -15,7 +15,7 @@ IYP OONI Implementation Tracker
 | Signal                                   | O - Done                     |
 | STUN Reachability                        | O - Done                  |
 | Telegram                                 | O - Done                  |
-| TOR                                      | O - Planned                  |
+| TOR                                      | O - Done                  |
 | TORSF                                    | O - Done                  |
 | Vanilla TOR                              | O - Done                  |
 | Webconnectivity                          | O - Done                     |
