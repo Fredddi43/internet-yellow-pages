@@ -7,7 +7,7 @@ import json
 import ipaddress
 from collections import defaultdict
 
-from utils import grabber
+from .utils import grabber
 
 from iyp import BaseCrawler
 

@@ -4,6 +4,7 @@ import boto3
 import gzip
 import shutil
 import datetime
+import botocore
 
 
 # list objects in directory
@@ -31,8 +32,8 @@ def download_and_extract(repo, tmpdir, test_name):
     # Create an anonymous session
     s3 = boto3.client(
         "s3",
-        config=boto3.session.Config(
-            signature_version="s3v4", region_name="eu-central-1"
+        config=botocore.client.Config(
+            signature_version=botocore.UNSIGNED, region_name="eu-central-1"
         ),
     )
 
@@ -73,7 +74,6 @@ def download_and_extract(repo, tmpdir, test_name):
                                 # Download the file
                                 try:
                                     s3.download_file(repo, obj["Key"], dest_file)
-                                    print(dest_file)
                                 except Exception as e:
                                     logging.error(
                                         f"Error downloading {obj['Key']}: {e}"
