@@ -11,8 +11,10 @@ from .utils import grabber
 from iyp import BaseCrawler
 
 ORG = "OONI"
-URL = "https://ooni.org/post/mining-ooni-data"
+URL = "s3://ooni-data-eu-fra/raw/"
 NAME = "ooni.httpheaderfieldmanipulation"
+
+label = "OONI HTTP Header Field Manipulation Test"
 
 
 class Crawler(BaseCrawler):
@@ -20,6 +22,7 @@ class Crawler(BaseCrawler):
     def __init__(self, organization, url, name):
         super().__init__(organization, url, name)
         self.repo = "ooni-data-eu-fra"
+        self.reference["reference_url_info"] = "https://ooni.org/post/mining-ooni-data"
 
     def run(self):
         """Fetch data and push to IYP."""
@@ -114,8 +117,8 @@ class Crawler(BaseCrawler):
         }
 
         httpheader_id = self.iyp.batch_get_nodes_by_single_prop(
-            "Tag", "label", {"HttpHeaderFieldManipulation"}
-        ).get("HttpHeaderFieldManipulation")
+            "Tag", "label", {label}
+        ).get(label)
 
         country_links = []
         censored_links = []

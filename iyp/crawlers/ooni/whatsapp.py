@@ -12,8 +12,10 @@ from .utils import grabber
 from iyp import BaseCrawler
 
 ORG = "OONI"
-URL = "https://ooni.org/post/mining-ooni-data"
+URL = "s3://ooni-data-eu-fra/raw/"
 NAME = "ooni.whatsapp"
+
+label = "OONI WhatsApp Test"
 
 
 class Crawler(BaseCrawler):
@@ -21,6 +23,7 @@ class Crawler(BaseCrawler):
     def __init__(self, organization, url, name):
         super().__init__(organization, url, name)
         self.repo = "ooni-data-eu-fra"
+        self.reference["reference_url_info"] = "https://ooni.org/post/mining-ooni-data"
 
     def run(self):
         """Fetch data and push to IYP."""
@@ -107,8 +110,8 @@ class Crawler(BaseCrawler):
         }
 
         whatsapp_id = self.iyp.batch_get_nodes_by_single_prop(
-            "Tag", "label", {"WhatsApp"}
-        ).get("WhatsApp")
+            "Tag", "label", {label}
+        ).get(label)
 
         country_links = []
         censored_links = []
@@ -145,6 +148,13 @@ class Crawler(BaseCrawler):
                         "endpoint_blocked",
                         "web_failure",
                         "web_ok",
+                        "no_server_failure",
+                        "no_server_ok",
+                        "no_server_blocked",
+                        "no_endpoint_ok",
+                        "no_endpoint_blocked",
+                        "no_web_failure",
+                        "no_web_ok",
                     ]:
                         props[f"percentage_{category}"] = percentages.get(category, 0)
                         props[f"count_{category}"] = counts.get(category, 0)
@@ -179,6 +189,13 @@ class Crawler(BaseCrawler):
             "endpoint_blocked",
             "web_failure",
             "web_ok",
+            "no_server_failure",
+            "no_server_ok",
+            "no_server_blocked",
+            "no_endpoint_ok",
+            "no_endpoint_blocked",
+            "no_web_failure",
+            "no_web_ok",
         ]
 
         # Populate the target_dict with counts

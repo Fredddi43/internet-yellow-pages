@@ -42,7 +42,7 @@ def download_and_extract(repo, tmpdir, test_name):
         (
             datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=i)
         ).strftime("%Y%m%d")
-        for i in range(7)
+        for i in range(1)
     ]
 
     # For each day, grab the data from the S3 bucket

@@ -12,8 +12,10 @@ from .utils import grabber
 from iyp import BaseCrawler
 
 ORG = "OONI"
-URL = "https://ooni.org/post/mining-ooni-data"
+URL = "s3://ooni-data-eu-fra/raw/"
 NAME = "ooni.telegram"
+
+label = "OONI Telegram Test"
 
 
 class Crawler(BaseCrawler):
@@ -21,6 +23,7 @@ class Crawler(BaseCrawler):
     def __init__(self, organization, url, name):
         super().__init__(organization, url, name)
         self.repo = "ooni-data-eu-fra"
+        self.reference["reference_url_info"] = "https://ooni.org/post/mining-ooni-data"
 
     def run(self):
         """Fetch data and push to IYP."""
@@ -112,8 +115,8 @@ class Crawler(BaseCrawler):
         }
 
         telegram_id = self.iyp.batch_get_nodes_by_single_prop(
-            "Tag", "label", {"Telegram"}
-        ).get("Telegram")
+            "Tag", "label", {label}
+        ).get(label)
 
         country_links = []
         censored_links = []
@@ -139,8 +142,12 @@ class Crawler(BaseCrawler):
                     for category in [
                         "unblocked",
                         "web_blocked",
-                        "http_blocking",
-                        "tcp_blocking",
+                        "http_blocked",
+                        "tcp_blocked",
+                        "no_unblocked",
+                        "no_web_blocked",
+                        "no_http_blocked",
+                        "no_tcp_blocked",
                     ]:
                         props[f"percentage_{category}"] = percentages.get(category, 0)
                         props[f"count_{category}"] = counts.get(category, 0)
@@ -167,7 +174,16 @@ class Crawler(BaseCrawler):
         target_dict = defaultdict(lambda: defaultdict(int))
 
         # Initialize counts for all categories
-        categories = ["unblocked", "web_blocked", "http_blocked", "tcp_blocked"]
+        categories = [
+            "unblocked",
+            "web_blocked",
+            "http_blocked",
+            "tcp_blocked",
+            "no_unblocked",
+            "no_web_blocked",
+            "no_http_blocked",
+            "no_tcp_blocked",
+        ]
 
         # Populate the target_dict with counts
         for entry in self.all_results:

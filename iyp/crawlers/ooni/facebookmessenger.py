@@ -11,16 +11,18 @@ from .utils import grabber
 
 from iyp import BaseCrawler
 
-# TODO include the github test URL as url_info and s3 for the data URL
 ORG = "OONI"
-URL = "https://ooni.org/post/mining-ooni-data"
+URL = "s3://ooni-data-eu-fra/raw/"
 NAME = "ooni.facebookmessenger"
+
+label = "OONI Facebook Messenger Test"
 
 
 class Crawler(BaseCrawler):
 
     def __init__(self, organization, url, name):
         super().__init__(organization, url, name)
+        self.reference["reference_url_info"] = "https://ooni.org/post/mining-ooni-data"
         self.repo = "ooni-data-eu-fra"
 
     def run(self):
@@ -96,10 +98,10 @@ class Crawler(BaseCrawler):
                 "IP", "ip", self.all_dns_resolvers, all=False
             ),
         }
-        # TODO make this global and settle on a name
+
         whatsapp_id = self.iyp.batch_get_nodes_by_single_prop(
-            "Tag", "label", {"OONI Facebook Messenger Test"}
-        ).get("OONI Facebook Messenger Test")
+            "Tag", "label", {label}
+        ).get(label)
 
         country_links = []
         censored_links = []
@@ -151,7 +153,7 @@ class Crawler(BaseCrawler):
 
     def calculate_percentages(self):
         target_dict = defaultdict(lambda: defaultdict(int))
-        # TODO include all categories explicitly
+
         # Initialize counts for all categories
         categories = ["unblocked", "dns_blocking", "tcp_blocking", "both_blocked"]
 
