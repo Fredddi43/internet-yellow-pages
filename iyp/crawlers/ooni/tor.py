@@ -74,6 +74,8 @@ class Crawler(BaseCrawler):
         except ValueError:
             pass
 
+        if not test_keys:
+            return
         # Check each target in the test_keys
         targets = test_keys.get("targets", {})
         for _, target_data in targets.items():
