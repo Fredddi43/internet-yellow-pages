@@ -30,8 +30,8 @@ class Crawler(BaseCrawler):
         self.all_percentages = {}
         self.all_ips = set()
         self.all_dns_resolvers = set()
-        self.all_tags = {"or_port_dirauth", "dir_port", "obfs4"}
-
+        self.unique_links = set()
+        self.all_tags = {"or_port_dirauth", "dir_port", "obfs4", "or_port"}
         # Create a temporary directory
         tmpdir = tempfile.mkdtemp()
 
@@ -91,7 +91,7 @@ class Crawler(BaseCrawler):
 
     def batch_add_to_iyp(self):
         self.node_ids = {
-            "asn": self.iyp.batch_get_nodes_by_single_prop("ASN", "asn", self.all_asns),
+            "asn": self.iyp.batch_get_nodes_by_single_prop("AS", "asn", self.all_asns),
             "country": self.iyp.batch_get_nodes_by_single_prop(
                 "Country", "country_code", self.all_countries
             ),
@@ -108,13 +108,15 @@ class Crawler(BaseCrawler):
 
         country_links = []
         censored_links = []
-        part_of_links = []
+        categorized_links = []
 
         for asn, country, ip, tor_type, _ in self.all_results:
             asn_id = self.node_ids["asn"].get(asn)
             country_id = self.node_ids["country"].get(country)
             ip_id = self.node_ids["ip"].get(str(ip))
             tag_id = self.node_ids["tag"].get(tor_type)
+            if tag_id:
+                tag_id = f"OONI Probe Tor Tag {tag_id}"
             if asn_id and ip_id:
                 props = self.reference.copy()
                 if (asn, ip) in self.all_percentages:
@@ -131,18 +133,19 @@ class Crawler(BaseCrawler):
                     {"src_id": asn_id, "dst_id": ip_id, "props": [props]}
                 )
 
-            if asn_id and country_id:
+            if asn_id and country_id and (asn_id, country_id) not in self.unique_links:
+                self.unique_links.add((asn_id, country_id))
                 country_links.append(
                     {"src_id": asn_id, "dst_id": country_id, "props": [self.reference]}
                 )
-
-            if ip_id and tag_id:
-                part_of_links.append(
+            if ip_id and tag_id and (ip_id, tag_id) not in self.unique_links:
+                self.unique_links.add((ip_id, tag_id))
+                categorized_links.append(
                     {"src_id": ip_id, "dst_id": tag_id, "props": [self.reference]}
                 )
         self.iyp.batch_add_links("CENSORED", censored_links)
         self.iyp.batch_add_links("COUNTRY", country_links)
-        self.iyp.batch_add_links("PART_OF", part_of_links)
+        self.iyp.batch_add_links("CATEGORIZED", categorized_links)
 
         # Batch add node labels
         self.iyp.batch_add_node_label(

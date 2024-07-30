@@ -217,11 +217,12 @@ class Crawler(BaseCrawler):
                                 "props": [self.reference],
                             }
                         )
+                    # TODO check if src is actually an ip, otherwise do nothing
                     if url_id and ip_id:
                         part_of_links.append(
                             {
-                                "src_id": url_id,
-                                "dst_id": ip_id,
+                                "src_id": ip_id,
+                                "dst_id": url_id,
                                 "props": [self.reference],
                             }
                         )
