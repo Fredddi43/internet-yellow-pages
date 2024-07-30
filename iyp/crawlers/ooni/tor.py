@@ -113,14 +113,12 @@ class Crawler(BaseCrawler):
         censored_links = []
         categorized_links = []
 
-        print(self.all_results)
-
         for asn, country, ip, tor_type, _ in self.all_results:
             asn_id = self.node_ids["asn"].get(asn)
             country_id = self.node_ids["country"].get(country)
             ip_id = self.node_ids["ip"].get(str(ip))
             tag_id = self.node_ids["tag"].get(f"OONI Probe Tor Tag {tor_type}")
-
+            print(asn, country, ip, tor_type)
             if asn_id and ip_id:
                 props = self.reference.copy()
                 if (asn, ip) in self.all_percentages:
