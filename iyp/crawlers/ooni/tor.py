@@ -21,6 +21,7 @@ class Crawler(BaseCrawler):
         super().__init__(organization, url, name)
         self.repo = "ooni-data-eu-fra"
         self.reference["reference_url_info"] = "https://ooni.org/post/mining-ooni-data"
+        self.unique_links = set()
 
     def run(self):
         """Fetch data and push to IYP."""
@@ -30,7 +31,6 @@ class Crawler(BaseCrawler):
         self.all_percentages = {}
         self.all_ips = set()
         self.all_dns_resolvers = set()
-        self.unique_links = set()
         self.all_tags = {"or_port_dirauth", "dir_port", "obfs4", "or_port"}
         # Create a temporary directory
         tmpdir = tempfile.mkdtemp()
@@ -90,6 +90,9 @@ class Crawler(BaseCrawler):
             self.all_results.append((probe_asn, probe_cc, ip, target_protocol, result))
 
     def batch_add_to_iyp(self):
+        # Prepend "OONI Probe Tor Tag" to all tag labels
+        prepended_tags = {f"OONI Probe Tor Tag {tag}" for tag in self.all_tags}
+
         self.node_ids = {
             "asn": self.iyp.batch_get_nodes_by_single_prop("AS", "asn", self.all_asns),
             "country": self.iyp.batch_get_nodes_by_single_prop(
@@ -99,7 +102,7 @@ class Crawler(BaseCrawler):
                 "IP", "ip", [str(ip) for ip in self.all_ips]
             ),
             "tag": self.iyp.batch_get_nodes_by_single_prop(
-                "Tag", "label", self.all_tags
+                "Tag", "label", prepended_tags
             ),
             "dns_resolver": self.iyp.batch_get_nodes_by_single_prop(
                 "IP", "ip", self.all_dns_resolvers, all=False
@@ -114,9 +117,8 @@ class Crawler(BaseCrawler):
             asn_id = self.node_ids["asn"].get(asn)
             country_id = self.node_ids["country"].get(country)
             ip_id = self.node_ids["ip"].get(str(ip))
-            tag_id = self.node_ids["tag"].get(tor_type)
-            if tag_id:
-                tag_id = f"OONI Probe Tor Tag {tag_id}"
+            tag_id = self.node_ids["tag"].get(f"OONI Probe Tor Tag {tor_type}")
+
             if asn_id and ip_id:
                 props = self.reference.copy()
                 if (asn, ip) in self.all_percentages:
@@ -143,6 +145,9 @@ class Crawler(BaseCrawler):
                 categorized_links.append(
                     {"src_id": ip_id, "dst_id": tag_id, "props": [self.reference]}
                 )
+
+        print(censored_links)
+        print(categorized_links)
         self.iyp.batch_add_links("CENSORED", censored_links)
         self.iyp.batch_add_links("COUNTRY", country_links)
         self.iyp.batch_add_links("CATEGORIZED", categorized_links)
