@@ -126,11 +126,11 @@ class Crawler(BaseCrawler):
                     counts = self.all_percentages[(asn, ip)].get("category_counts", {})
                     total_count = self.all_percentages[(asn, ip)].get("total_count", 0)
 
-                    for category in ["Failure"]:
+                    for category in ["Failure", "Success"]:
                         props[f"percentage_{category}"] = percentages.get(category, 0)
                         props[f"count_{category}"] = counts.get(category, 0)
                     props["total_count"] = total_count
-
+                print("src_id ", str(asn_id), "dst_id ", str(ip_id))
                 censored_links.append(
                     {"src_id": asn_id, "dst_id": ip_id, "props": [props]}
                 )
@@ -147,7 +147,6 @@ class Crawler(BaseCrawler):
                 )
 
         print(censored_links)
-        print(categorized_links)
         self.iyp.batch_add_links("CENSORED", censored_links)
         self.iyp.batch_add_links("COUNTRY", country_links)
         self.iyp.batch_add_links("CATEGORIZED", categorized_links)
