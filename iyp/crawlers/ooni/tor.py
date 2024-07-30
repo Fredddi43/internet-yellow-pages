@@ -113,6 +113,8 @@ class Crawler(BaseCrawler):
         censored_links = []
         categorized_links = []
 
+        print(self.all_results)
+
         for asn, country, ip, tor_type, _ in self.all_results:
             asn_id = self.node_ids["asn"].get(asn)
             country_id = self.node_ids["country"].get(country)
@@ -146,7 +148,6 @@ class Crawler(BaseCrawler):
                     {"src_id": ip_id, "dst_id": tag_id, "props": [self.reference]}
                 )
 
-        print(censored_links)
         self.iyp.batch_add_links("CENSORED", censored_links)
         self.iyp.batch_add_links("COUNTRY", country_links)
         self.iyp.batch_add_links("CATEGORIZED", categorized_links)
