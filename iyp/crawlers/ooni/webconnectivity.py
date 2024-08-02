@@ -222,7 +222,12 @@ class Crawler(BaseCrawler):
                 ]
                 for ip in compressed_ips:
                     ip_id = ip_id_map.get(ip)
-                    if hostname_id and ip_id:
+                    if (
+                        hostname_id
+                        and ip_id
+                        and (hostname_id, ip_id) not in self.unique_links["RESOLVES_TO"]
+                    ):
+                        self.unique_links["RESOLVES_TO"].add((hostname_id, ip_id))
                         resolves_to_links.append(
                             {
                                 "src_id": hostname_id,
