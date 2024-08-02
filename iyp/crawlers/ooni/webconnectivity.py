@@ -7,6 +7,7 @@ import json
 import tldextract
 import ipaddress
 from collections import defaultdict
+from urllib.parse import urlparse
 
 from .utils import grabber
 
@@ -34,7 +35,7 @@ class Crawler(BaseCrawler):
         self.all_percentages = list()
         self.all_hostnames = set()
         self.all_dns_resolvers = set()
-        self.unique_links = set()
+        self.unique_links = {}
 
         # Create a temporary directory
         tmpdir = tempfile.mkdtemp()
@@ -103,8 +104,9 @@ class Crawler(BaseCrawler):
         ips["ipv4"] = list(set(ips["ipv4"]))
         ips["ipv6"] = list(set(ips["ipv6"]))
 
-        # Extract the hostname from the URL
-        hostname = tldextract.extract(input_url).fqdn
+        # Extract the hostname from the URL if its not an IP address
+        if not bool(ipaddress.ip_address(urlparse(input_url).hostname)):
+            hostname = tldextract.extract(input_url).fqdn
 
         # Ensure all required fields are present
         if probe_asn and probe_cc and input_url and test_keys:
@@ -201,9 +203,9 @@ class Crawler(BaseCrawler):
                 if (
                     asn_id
                     and country_id
-                    and (asn_id, country_id) not in self.unique_links
+                    and (asn_id, country_id) not in self.unique_links["COUNTRY"]
                 ):
-                    self.unique_links.add((asn_id, country_id))
+                    self.unique_links["COUNTRY"].add((asn_id, country_id))
                     country_links.append(
                         {
                             "src_id": asn_id,
@@ -230,18 +232,35 @@ class Crawler(BaseCrawler):
                         )
                     if url_id and ip_id:
                         if lambda ip: True if ipaddress.ip_address(ip) else False:
-                            part_of_links.append(
-                                {
-                                    "src_id": ip_id,
-                                    "dst_id": url_id,
-                                    "props": [self.reference],
-                                }
-                            )
+                            if (
+                                ip_id
+                                and url_id
+                                and (ip_id, url_id) not in self.unique_links["PART_OF"]
+                            ):
+                                self.unique_links["PART_OF"].add((ip_id, url_id))
+                                part_of_links.append(
+                                    {
+                                        "src_id": ip_id,
+                                        "dst_id": url_id,
+                                        "props": [self.reference],
+                                    }
+                                )
 
             if hostname_id and url_id:
-                part_of_links.append(
-                    {"src_id": hostname_id, "dst_id": url_id, "props": [self.reference]}
-                )
+                if not bool(ipaddress.ip_address(urlparse(url).hostname)):
+                    if (
+                        hostname_id
+                        and url_id
+                        and (hostname_id, url_id) not in self.unique_links["PART_OF"]
+                    ):
+                        self.unique_links["PART_OF"].add((hostname_id, url_id))
+                        part_of_links.append(
+                            {
+                                "src_id": hostname_id,
+                                "dst_id": url_id,
+                                "props": [self.reference],
+                            }
+                        )
 
         # Batch add the links (this is faster than adding them one by one)
         self.iyp.batch_add_links("CENSORED", censored_links)
