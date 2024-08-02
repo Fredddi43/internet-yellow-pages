@@ -119,6 +119,7 @@ class Crawler(BaseCrawler):
             ip_id = self.node_ids["ip"].get(str(ip))
             tag_id = self.node_ids["tag"].get(f"OONI Probe Tor Tag {tor_type}")
             print(asn, country, ip, tor_type)
+            print(asn_id, country_id, ip_id, tag_id)
             if asn_id and ip_id:
                 props = self.reference.copy()
                 if (asn, ip) in self.all_percentages:
