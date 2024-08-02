@@ -147,7 +147,6 @@ class Crawler(BaseCrawler):
                 categorized_links.append(
                     {"src_id": ip_id, "dst_id": tag_id, "props": [self.reference]}
                 )
-        print(censored_links)
         self.iyp.batch_add_links("CENSORED", censored_links)
         self.iyp.batch_add_links("COUNTRY", country_links)
         self.iyp.batch_add_links("CATEGORIZED", categorized_links)
