@@ -66,6 +66,9 @@ class Crawler(BaseCrawler):
         probe_cc = one_line.get("probe_cc")
         test_keys = one_line.get("test_keys", {})
 
+        self.all_asns.add(probe_asn)
+        self.all_countries.add(probe_cc)
+
         # Add the DNS resolver to the set, unless it's not a valid IP address
         try:
             self.all_dns_resolvers.add(
@@ -118,9 +121,7 @@ class Crawler(BaseCrawler):
             country_id = self.node_ids["country"].get(country)
             ip_id = self.node_ids["ip"].get(str(ip))
             tag_id = self.node_ids["tag"].get(f"OONI Probe Tor Tag {tor_type}")
-            # print(asn, country, ip, tor_type)
-            # print(asn_id, country_id, ip_id, tag_id)
-            print(asn in self.all_asns)
+
             if asn_id and ip_id:
                 props = self.reference.copy()
                 if (asn, ip) in self.all_percentages:
@@ -132,7 +133,6 @@ class Crawler(BaseCrawler):
                         props[f"percentage_{category}"] = percentages.get(category, 0)
                         props[f"count_{category}"] = counts.get(category, 0)
                     props["total_count"] = total_count
-                print("src_id ", str(asn_id), "dst_id ", str(ip_id))
                 censored_links.append(
                     {"src_id": asn_id, "dst_id": ip_id, "props": [props]}
                 )
@@ -147,7 +147,7 @@ class Crawler(BaseCrawler):
                 categorized_links.append(
                     {"src_id": ip_id, "dst_id": tag_id, "props": [self.reference]}
                 )
-
+        print(censored_links)
         self.iyp.batch_add_links("CENSORED", censored_links)
         self.iyp.batch_add_links("COUNTRY", country_links)
         self.iyp.batch_add_links("CATEGORIZED", categorized_links)
