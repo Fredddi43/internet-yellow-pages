@@ -92,7 +92,7 @@ class Crawler(BaseCrawler):
     def batch_add_to_iyp(self):
         # Prepend "OONI Probe Tor Tag" to all tag labels
         prepended_tags = {f"OONI Probe Tor Tag {tag}" for tag in self.all_tags}
-
+        print(self.all_asns)
         self.node_ids = {
             "asn": self.iyp.batch_get_nodes_by_single_prop("AS", "asn", self.all_asns),
             "country": self.iyp.batch_get_nodes_by_single_prop(
@@ -118,8 +118,9 @@ class Crawler(BaseCrawler):
             country_id = self.node_ids["country"].get(country)
             ip_id = self.node_ids["ip"].get(str(ip))
             tag_id = self.node_ids["tag"].get(f"OONI Probe Tor Tag {tor_type}")
-            print(asn, country, ip, tor_type)
-            print(asn_id, country_id, ip_id, tag_id)
+            # print(asn, country, ip, tor_type)
+            # print(asn_id, country_id, ip_id, tag_id)
+            print(asn in self.all_asns)
             if asn_id and ip_id:
                 props = self.reference.copy()
                 if (asn, ip) in self.all_percentages:
