@@ -34,6 +34,7 @@ class Crawler(BaseCrawler):
         self.all_percentages = list()
         self.all_hostnames = set()
         self.all_dns_resolvers = set()
+        self.unique_links = set()
 
         # Create a temporary directory
         tmpdir = tempfile.mkdtemp()
@@ -197,9 +198,19 @@ class Crawler(BaseCrawler):
                 )
 
             if asn_id and country_id:
-                country_links.append(
-                    {"src_id": asn_id, "dst_id": country_id, "props": [self.reference]}
-                )
+                if (
+                    asn_id
+                    and country_id
+                    and (asn_id, country_id) not in self.unique_links
+                ):
+                    self.unique_links.add((asn_id, country_id))
+                    country_links.append(
+                        {
+                            "src_id": asn_id,
+                            "dst_id": country_id,
+                            "props": [self.reference],
+                        }
+                    )
 
             if result == "OK" and hostname and ips:
                 compressed_ips = [
@@ -217,15 +228,15 @@ class Crawler(BaseCrawler):
                                 "props": [self.reference],
                             }
                         )
-                    # TODO check if src is actually an ip, otherwise do nothing
                     if url_id and ip_id:
-                        part_of_links.append(
-                            {
-                                "src_id": ip_id,
-                                "dst_id": url_id,
-                                "props": [self.reference],
-                            }
-                        )
+                        if lambda ip: True if ipaddress.ip_address(ip) else False:
+                            part_of_links.append(
+                                {
+                                    "src_id": ip_id,
+                                    "dst_id": url_id,
+                                    "props": [self.reference],
+                                }
+                            )
 
             if hostname_id and url_id:
                 part_of_links.append(

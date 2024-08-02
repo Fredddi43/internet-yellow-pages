@@ -32,6 +32,7 @@ class Crawler(BaseCrawler):
         self.all_results = list()
         self.all_percentages = {}
         self.all_dns_resolvers = set()
+        self.unique_links = set()
 
         # Create a temporary directory
         tmpdir = tempfile.mkdtemp()
@@ -139,9 +140,19 @@ class Crawler(BaseCrawler):
                     {"src_id": asn_id, "dst_id": psiphon_id, "props": [props]}
                 )
 
-                country_links.append(
-                    {"src_id": asn_id, "dst_id": country_id, "props": [props]}
-                )
+                if (
+                    asn_id
+                    and country_id
+                    and (asn_id, country_id) not in self.unique_links
+                ):
+                    self.unique_links.add((asn_id, country_id))
+                    country_links.append(
+                        {
+                            "src_id": asn_id,
+                            "dst_id": country_id,
+                            "props": [self.reference],
+                        }
+                    )
 
         # Batch add the links (this is faster than adding them one by one)
         self.iyp.batch_add_links("CENSORED", censored_links)

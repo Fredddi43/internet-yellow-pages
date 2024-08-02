@@ -21,10 +21,10 @@ class Crawler(BaseCrawler):
         super().__init__(organization, url, name)
         self.repo = "ooni-data-eu-fra"
         self.reference["reference_url_info"] = "https://ooni.org/post/mining-ooni-data"
-        self.unique_links = set()
 
     def run(self):
         """Fetch data and push to IYP."""
+        self.unique_links = set()
         self.all_asns = set()
         self.all_countries = set()
         self.all_results = list()

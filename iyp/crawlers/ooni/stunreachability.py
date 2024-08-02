@@ -35,6 +35,7 @@ class Crawler(BaseCrawler):
         self.all_hostnames = set()
         self.all_dns_resolvers = set()
         self.all_ips = set()
+        self.unique_links = set()
 
         # Create a temporary directory
         tmpdir = tempfile.mkdtemp()
@@ -187,9 +188,19 @@ class Crawler(BaseCrawler):
                 )
 
             if asn_id and country_id:
-                country_links.append(
-                    {"src_id": asn_id, "dst_id": country_id, "props": [self.reference]}
-                )
+                if (
+                    asn_id
+                    and country_id
+                    and (asn_id, country_id) not in self.unique_links
+                ):
+                    self.unique_links.add((asn_id, country_id))
+                    country_links.append(
+                        {
+                            "src_id": asn_id,
+                            "dst_id": country_id,
+                            "props": [self.reference],
+                        }
+                    )
 
             if result == "Success" and hostname_id:
                 for ip in ip_addresses:
