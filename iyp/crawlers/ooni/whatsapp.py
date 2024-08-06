@@ -33,7 +33,7 @@ class Crawler(BaseCrawler):
         self.all_results = list()
         self.all_percentages = {}
         self.all_dns_resolvers = set()
-        self.unique_links = set()
+        self.unique_links = {"COUNTRY": set(), "CENSORED": set()}
 
         # Create a temporary directory
         tmpdir = tempfile.mkdtemp()
@@ -168,9 +168,9 @@ class Crawler(BaseCrawler):
                 if (
                     asn_id
                     and country_id
-                    and (asn_id, country_id) not in self.unique_links
+                    and (asn_id, country_id) not in self.unique_links["COUNTRY"]
                 ):
-                    self.unique_links.add((asn_id, country_id))
+                    self.unique_links["COUNTRY"].add((asn_id, country_id))
                     country_links.append(
                         {
                             "src_id": asn_id,

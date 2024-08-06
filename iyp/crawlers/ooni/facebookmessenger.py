@@ -24,6 +24,7 @@ class Crawler(BaseCrawler):
         super().__init__(organization, url, name)
         self.reference["reference_url_info"] = "https://ooni.org/post/mining-ooni-data"
         self.repo = "ooni-data-eu-fra"
+        self.unique_links = {"COUNTRY": set(), "CENSORED": set()}
 
     def run(self):
         """Fetch data and push to IYP."""
@@ -33,7 +34,6 @@ class Crawler(BaseCrawler):
         self.all_results = list()
         self.all_percentages = list()
         self.all_dns_resolvers = set()
-        self.unique_links = set()
 
         # Create a temporary directory
         tmpdir = tempfile.mkdtemp()
@@ -107,7 +107,9 @@ class Crawler(BaseCrawler):
         country_links = []
         censored_links = []
 
-        # Ensure all IDs are present and process results
+        # Accumulate properties for each ASN-country pair
+        link_properties = defaultdict(lambda: defaultdict(lambda: 0))
+
         for asn, country, result_dns, result_tcp in self.all_results:
             asn_id = self.node_ids["asn"].get(asn)
             country_id = self.node_ids["country"].get(country)
@@ -135,16 +137,12 @@ class Crawler(BaseCrawler):
                         props[f"count_{category}"] = counts.get(category, 0)
                     props["total_count"] = total_count
 
-                censored_links.append(
-                    {"src_id": asn_id, "dst_id": whatsapp_id, "props": [props]}
-                )
+                # Accumulate properties
+                link_properties[(asn_id, whatsapp_id)] = props
 
-                if (
-                    asn_id
-                    and country_id
-                    and (asn_id, country_id) not in self.unique_links
-                ):
-                    self.unique_links.add((asn_id, country_id))
+                # Check if the COUNTRY link is unique
+                if (asn_id, country_id) not in self.unique_links["COUNTRY"]:
+                    self.unique_links["COUNTRY"].add((asn_id, country_id))
                     country_links.append(
                         {
                             "src_id": asn_id,
@@ -152,6 +150,14 @@ class Crawler(BaseCrawler):
                             "props": [self.reference],
                         }
                     )
+
+        # Create links only once per ASN-country pair
+        for (asn_id, whatsapp_id), props in link_properties.items():
+            if (asn_id, whatsapp_id) not in self.unique_links["CENSORED"]:
+                self.unique_links["CENSORED"].add((asn_id, whatsapp_id))
+                censored_links.append(
+                    {"src_id": asn_id, "dst_id": whatsapp_id, "props": [props]}
+                )
 
         # Batch add the links (this is faster than adding them one by one)
         self.iyp.batch_add_links("CENSORED", censored_links)

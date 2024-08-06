@@ -24,6 +24,12 @@ class Crawler(BaseCrawler):
         super().__init__(organization, url, name)
         self.repo = "ooni-data-eu-fra"
         self.reference["reference_url_info"] = "https://ooni.org/post/mining-ooni-data"
+        self.unique_links = {
+            "COUNTRY": set(),
+            "CENSORED": set(),
+            "RESOLVES_TO": set(),
+            "PART_OF": set(),
+        }
 
     def run(self):
         """Fetch data and push to IYP."""
@@ -35,7 +41,6 @@ class Crawler(BaseCrawler):
         self.all_percentages = list()
         self.all_hostnames = set()
         self.all_dns_resolvers = set()
-        self.unique_links = {}
 
         # Create a temporary directory
         tmpdir = tempfile.mkdtemp()
@@ -44,26 +49,20 @@ class Crawler(BaseCrawler):
         grabber.download_and_extract(self.repo, tmpdir, "webconnectivity")
         logging.info("Successfully downloaded and extracted all files")
         # Now that we have downloaded the jsonl files for the test we want, we can extract the data we want
-        testdir = os.path.join(
-            tmpdir,
-            "webconnectivity",
-        )
+        testdir = os.path.join(tmpdir, "webconnectivity")
         for file_name in os.listdir(testdir):
-            file_path = os.path.join(
-                testdir,
-                file_name,
-            )
+            file_path = os.path.join(testdir, file_name)
             if os.path.isfile(file_path) and file_path.endswith(".jsonl"):
                 with open(file_path, "r") as file:
                     for i, line in enumerate(file):
                         data = json.loads(line)
                         self.process_one_line(data)
                         logging.info(f"\rProcessed {i+1} lines")
-        logging.info("\n Processed lines, now calculating percentages\n")
+        logging.info("\nProcessed lines, now calculating percentages\n")
         self.calculate_percentages()
-        logging.info("\n Calculated percentages, now adding entries to IYP\n")
+        logging.info("\nCalculated percentages, now adding entries to IYP\n")
         self.batch_add_to_iyp()
-        logging.info("\n Successfully added all entries to IYP\n")
+        logging.info("\nSuccessfully added all entries to IYP\n")
 
     # Process a single line from the jsonl file and store the results locally
     def process_one_line(self, one_line):
@@ -332,7 +331,7 @@ def main() -> None:
     args = parser.parse_args()
 
     scriptname = os.path.basename(sys.argv[0]).replace("/", "_")[0:-3]
-    FORMAT = "%(asctime)s %(levelname)s %(message)s"
+    FORMAT = "%(asctime)s %(levellevelname)s %(message)s"
     logging.basicConfig(
         format=FORMAT,
         filename="log/" + scriptname + ".log",

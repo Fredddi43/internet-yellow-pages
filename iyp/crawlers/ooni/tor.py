@@ -21,10 +21,10 @@ class Crawler(BaseCrawler):
         super().__init__(organization, url, name)
         self.repo = "ooni-data-eu-fra"
         self.reference["reference_url_info"] = "https://ooni.org/post/mining-ooni-data"
+        self.unique_links = {"COUNTRY": set(), "CENSORED": set(), "CATEGORIZED": set()}
 
     def run(self):
         """Fetch data and push to IYP."""
-        self.unique_links = set()
         self.all_asns = set()
         self.all_countries = set()
         self.all_results = list()
@@ -115,6 +115,8 @@ class Crawler(BaseCrawler):
         censored_links = []
         categorized_links = []
 
+        link_properties = defaultdict(lambda: defaultdict(lambda: 0))
+
         for asn, country, ip, tor_type, _ in self.all_results:
             asn_id = self.node_ids["asn"].get(asn)
             country_id = self.node_ids["country"].get(country)
@@ -132,20 +134,34 @@ class Crawler(BaseCrawler):
                         props[f"percentage_{category}"] = percentages.get(category, 0)
                         props[f"count_{category}"] = counts.get(category, 0)
                     props["total_count"] = total_count
+                link_properties[(asn_id, ip_id)] = props
+
+            if (
+                asn_id
+                and country_id
+                and (asn_id, country_id) not in self.unique_links["COUNTRY"]
+            ):
+                self.unique_links["COUNTRY"].add((asn_id, country_id))
+                country_links.append(
+                    {"src_id": asn_id, "dst_id": country_id, "props": [self.reference]}
+                )
+            if (
+                ip_id
+                and tag_id
+                and (ip_id, tag_id) not in self.unique_links["CATEGORIZED"]
+            ):
+                self.unique_links["CATEGORIZED"].add((ip_id, tag_id))
+                categorized_links.append(
+                    {"src_id": ip_id, "dst_id": tag_id, "props": [self.reference]}
+                )
+
+        for (asn_id, ip_id), props in link_properties.items():
+            if (asn_id, ip_id) not in self.unique_links["CENSORED"]:
+                self.unique_links["CENSORED"].add((asn_id, ip_id))
                 censored_links.append(
                     {"src_id": asn_id, "dst_id": ip_id, "props": [props]}
                 )
 
-            if asn_id and country_id and (asn_id, country_id) not in self.unique_links:
-                self.unique_links.add((asn_id, country_id))
-                country_links.append(
-                    {"src_id": asn_id, "dst_id": country_id, "props": [self.reference]}
-                )
-            if ip_id and tag_id and (ip_id, tag_id) not in self.unique_links:
-                self.unique_links.add((ip_id, tag_id))
-                categorized_links.append(
-                    {"src_id": ip_id, "dst_id": tag_id, "props": [self.reference]}
-                )
         self.iyp.batch_add_links("CENSORED", censored_links)
         self.iyp.batch_add_links("COUNTRY", country_links)
         self.iyp.batch_add_links("CATEGORIZED", categorized_links)
@@ -193,7 +209,7 @@ def main() -> None:
     args = parser.parse_args()
 
     scriptname = os.path.basename(sys.argv[0]).replace("/", "_")[0:-3]
-    FORMAT = "%(asctime)s %(levelname)s %(message)s"
+    FORMAT = "%(asctime)s %(levellevelname)s %(message)s"
     logging.basicConfig(
         format=FORMAT,
         filename="log/" + scriptname + ".log",

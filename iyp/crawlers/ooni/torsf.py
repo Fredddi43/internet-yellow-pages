@@ -23,6 +23,7 @@ class Crawler(BaseCrawler):
         super().__init__(organization, url, name)
         self.repo = "ooni-data-eu-fra"
         self.reference["reference_url_info"] = "https://ooni.org/post/mining-ooni-data"
+        self.unique_links = {"COUNTRY": set(), "CENSORED": set()}
 
     def run(self):
         """Fetch data and push to IYP."""
@@ -32,7 +33,6 @@ class Crawler(BaseCrawler):
         self.all_results = list()
         self.all_percentages = {}
         self.all_dns_resolvers = set()
-        self.unique_links = set()
 
         # Create a temporary directory
         tmpdir = tempfile.mkdtemp()
@@ -103,6 +103,8 @@ class Crawler(BaseCrawler):
         country_links = []
         censored_links = []
 
+        link_properties = defaultdict(lambda: defaultdict(lambda: 0))
+
         # Ensure all IDs are present and process results
         for asn, country, result in self.all_results:
             asn_id = self.node_ids["asn"].get(asn)
@@ -126,23 +128,28 @@ class Crawler(BaseCrawler):
                         props[f"count_{category}"] = counts.get(category, 0)
                     props["total_count"] = total_count
 
+                link_properties[(asn_id, torsf_id)] = props
+
+            if (
+                asn_id
+                and country_id
+                and (asn_id, country_id) not in self.unique_links["COUNTRY"]
+            ):
+                self.unique_links["COUNTRY"].add((asn_id, country_id))
+                country_links.append(
+                    {
+                        "src_id": asn_id,
+                        "dst_id": country_id,
+                        "props": [self.reference],
+                    }
+                )
+
+        for (asn_id, torsf_id), props in link_properties.items():
+            if (asn_id, torsf_id) not in self.unique_links["CENSORED"]:
+                self.unique_links["CENSORED"].add((asn_id, torsf_id))
                 censored_links.append(
                     {"src_id": asn_id, "dst_id": torsf_id, "props": [props]}
                 )
-
-                if (
-                    asn_id
-                    and country_id
-                    and (asn_id, country_id) not in self.unique_links
-                ):
-                    self.unique_links.add((asn_id, country_id))
-                    country_links.append(
-                        {
-                            "src_id": asn_id,
-                            "dst_id": country_id,
-                            "props": [self.reference],
-                        }
-                    )
 
         # Batch add the links (this is faster than adding them one by one)
         self.iyp.batch_add_links("CENSORED", censored_links)
