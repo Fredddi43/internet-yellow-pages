@@ -252,7 +252,19 @@ class Crawler(BaseCrawler):
                                 )
 
             if hostname_id and url_id:
-                if not bool(ipaddress.ip_address(urlparse(url).hostname)):
+                # Check if the url is a valid IP address
+                if not (
+                    lambda url: (
+                        lambda hostname: (
+                            True
+                            if hostname
+                            and not isinstance(
+                                ValueError, type(ipaddress.ip_address(hostname))
+                            )
+                            else False
+                        )
+                    )(urlparse(url).hostname)
+                ):
                     if (
                         hostname_id
                         and url_id
