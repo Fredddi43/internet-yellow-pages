@@ -95,7 +95,6 @@ class Crawler(BaseCrawler):
     def batch_add_to_iyp(self):
         # Prepend "OONI Probe Tor Tag" to all tag labels
         prepended_tags = {f"OONI Probe Tor Tag {tag}" for tag in self.all_tags}
-        print(self.all_asns)
         self.node_ids = {
             "asn": self.iyp.batch_get_nodes_by_single_prop("AS", "asn", self.all_asns),
             "country": self.iyp.batch_get_nodes_by_single_prop(
