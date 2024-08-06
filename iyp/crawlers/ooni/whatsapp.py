@@ -161,15 +161,13 @@ class Crawler(BaseCrawler):
                         props[f"count_{category}"] = counts.get(category, 0)
                     props["total_count"] = total_count
 
-                censored_links.append(
-                    {"src_id": asn_id, "dst_id": whatsapp_id, "props": [props]}
-                )
+                if (asn_id, whatsapp_id) not in self.unique_links["CENSORED"]:
+                    self.unique_links["CENSORED"].add((asn_id, whatsapp_id))
+                    censored_links.append(
+                        {"src_id": asn_id, "dst_id": whatsapp_id, "props": [props]}
+                    )
 
-                if (
-                    asn_id
-                    and country_id
-                    and (asn_id, country_id) not in self.unique_links["COUNTRY"]
-                ):
+                if (asn_id, country_id) not in self.unique_links["COUNTRY"]:
                     self.unique_links["COUNTRY"].add((asn_id, country_id))
                     country_links.append(
                         {
