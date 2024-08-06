@@ -54,12 +54,10 @@ class PostProcess(BasePostProcess):
         """
         self.iyp.tx.run(query, link_ids=link_ids)
 
-    def clean_ooni_country_links(self):
-        ooni_country_links = self.get_links_of_type(
-            "COUNTRY", {"reference_org": "OONI"}
-        )
+    def clean_links_of_type(self, link_type, prop_dict=None):
+        links = self.get_links_of_type(link_type, prop_dict)
         link_dict = {}
-        for link in ooni_country_links:
+        for link in links:
             key = (link["src_id"], link["dst_id"])
             if key not in link_dict:
                 link_dict[key] = []
@@ -74,8 +72,10 @@ class PostProcess(BasePostProcess):
         self.delete_links(filtered_link_ids)
 
     def run(self):
-        # start by cleaning links of type 'COUNTRY' and reference_org 'OONI'
-        self.clean_ooni_country_links()
+        # Clean links of all types with the reference_org 'OONI'
+        link_types = ["COUNTRY", "CENSORED", "RESOLVES_TO", "PART_OF", "CATEGORIZED"]
+        for link_type in link_types:
+            self.clean_links_of_type(link_type, {"reference_org": "OONI"})
 
 
 def main() -> None:
